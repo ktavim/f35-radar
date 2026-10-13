@@ -1,0 +1,351 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  HostListener,
+  ViewChild,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked
+} from '@angular/core';
+import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
+import { LucideAngularModule, Search } from 'lucide-angular';
+import { ToastService } from '@shared/ui/toast.service';
+import { redactObject } from '@lib/redact';
+import { formatEvent, type FormattedLine, type LineType } from './event-format';
+import type { ScanEvent } from '@core/models';
+
+const LINE_TYPES: LineType[] = ['VERBOSE', 'INFO', 'WARN', 'BANDIT', 'ERROR'];
+
+interface RenderedLine { line: FormattedLine; lineNo: number }
+
+@Component({
+  selector: 'app-terminal',
+  standalone: true,
+  imports: [ScrollingModule, LucideAngularModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    class: 'block',
+    tabindex: '0'
+  },
+  styles: [`
+    :host {
+      display: block;
+      height: 100%;
+      outline: none;
+    }
+    /* Phosphor radar-scope palette: the log body reads green, while WARN /
+       BANDIT / ERROR tags keep their amber and red so trouble still jumps
+       out instead of blending into the green. The dock chrome (header, search,
+       filter popover) stays neutral so the green reads as the screen itself. */
+    .term-container {
+      background: #09090b;
+      color: #4ade80;
+    }
+    .term-line {
+      display: grid;
+      grid-template-columns: 2.5rem 7rem 6rem 16rem 1fr;
+      column-gap: 0.75rem;
+      padding: 0 1rem 0 0.25rem;
+      line-height: 1.6;
+      font-feature-settings: "tnum";
+      font-size: 12.5px;
+      align-items: start;
+    }
+    .term-line .ln {
+      color: #2f6b45;
+      text-align: right;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .term-line .ts { color: #3f8f5c; white-space: nowrap; }
+    .term-line .tag { font-weight: 500; white-space: nowrap; }
+    .term-line .host {
+      color: #4ade80;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .term-line .msg {
+      color: #4ade80;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .term-line.tag-VERBOSE .tag { color: #7f7f88; }
+    .term-line.tag-INFO .tag { color: #22c55e; }
+    .term-line.tag-WARN .tag { color: var(--color-warn); }
+    .term-line.tag-BANDIT .tag { color: var(--color-danger); }
+    .term-line.tag-ERROR .tag { color: var(--color-danger); font-weight: 700; }
+    .term-line.is-blocker {
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .blink-caret::after {
+      content: '▌';
+      margin-left: 4px;
+      animation: blink 1s step-end infinite;
+      color: #3f8f5c;
+    }
+    .term-waiting { color: #3f8f5c; }
+    @keyframes blink { 50% { opacity: 0; } }
+  `],
+  template: `
+    <div class="term-container h-full flex flex-col">
+      <!-- inline search field shown when search is opened from the dock -->
+      @if (searchOpen()) {
+        <div class="h-8 flex items-center gap-2 px-3 bg-zinc-900 border-b border-border shrink-0">
+          <lucide-icon [name]="icons.Search" [size]="12" class="text-fg-subtle"></lucide-icon>
+          <input
+            #searchInput
+            type="text"
+            class="h-6 flex-1 max-w-md px-2 text-xs bg-surface border border-border-strong rounded-sm font-mono outline-none"
+            [value]="searchText()"
+            (input)="onSearch($any($event.target).value)"
+            (keydown.escape)="closeSearch()"
+            placeholder="filter…" />
+          <button type="button"
+                  class="text-xs text-fg-subtle hover:text-fg"
+                  (click)="closeSearch()"
+                  aria-label="Close search">esc</button>
+        </div>
+      }
+
+      <!-- inline filter popover shown when filter is opened from the dock -->
+      @if (filterOpen()) {
+        <div class="absolute top-8 right-3 w-44 bg-surface border border-border rounded-md shadow-lg z-10 p-2">
+          <p class="text-xs uppercase tracking-wide text-fg-muted px-2 pb-2">Line types</p>
+          @for (t of allLineTypes; track t) {
+            <label class="flex items-center gap-2 px-2 py-1 text-xs cursor-pointer hover:bg-surface-2 rounded-sm">
+              <input type="checkbox"
+                     [checked]="!hiddenTypes().has(t)"
+                     (change)="toggleType(t)" />
+              <span class="font-mono">{{ t }}</span>
+            </label>
+          }
+        </div>
+      }
+
+      <!-- body -->
+      <div class="relative flex-1 min-h-0">
+        @if (events().length === 0) {
+          <div class="flex items-center px-4 py-3 term-waiting text-xs font-mono blink-caret">
+            waiting for first event…
+          </div>
+        } @else {
+          <cdk-virtual-scroll-viewport
+            #viewport
+            itemSize="20"
+            class="thin-scroll h-full"
+            (scrolledIndexChange)="onScrolled($event)">
+            <div *cdkVirtualFor="let row of visibleLines(); trackBy: trackBySeq"
+                 class="term-line"
+                 [class.is-blocker]="row.line.raw.type === 'blocker_found'"
+                 [class.tag-VERBOSE]="row.line.type === 'VERBOSE'"
+                 [class.tag-INFO]="row.line.type === 'INFO'"
+                 [class.tag-WARN]="row.line.type === 'WARN'"
+                 [class.tag-BANDIT]="row.line.type === 'BANDIT'"
+                 [class.tag-ERROR]="row.line.type === 'ERROR'">
+              <span class="ln">{{ row.lineNo }}</span>
+              <span class="ts">{{ row.line.tsLabel }}</span>
+              <span class="tag">[{{ row.line.type }}]</span>
+              <span class="host">{{ row.line.host || '—' }}</span>
+              <span class="msg">{{ row.line.message }}</span>
+            </div>
+          </cdk-virtual-scroll-viewport>
+
+          @if (autoScrollPaused() && newSinceScroll() > 0) {
+            <button
+              type="button"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 h-7 rounded-full bg-zinc-900 border border-border-strong text-xs text-fg flex items-center gap-2 shadow-lg"
+              (click)="jumpToLatest()">
+              ↓ {{ newSinceScroll() }} new lines · jump to latest
+            </button>
+          }
+        }
+      </div>
+
+    </div>
+  `
+})
+export class TerminalComponent {
+  readonly icons = { Search };
+  readonly allLineTypes = LINE_TYPES;
+
+  readonly events = input.required<ScanEvent[]>();
+  readonly scanId = input<string>('');
+
+  readonly hiddenTypes = signal<Set<LineType>>(new Set());
+  readonly searchText = signal('');
+  readonly searchOpen = signal(false);
+  readonly filterOpen = signal(false);
+
+  readonly autoScrollPaused = signal(false);
+  readonly newSinceScroll = signal(0);
+  private lastIndex = 0;
+
+  @ViewChild('viewport') viewport?: CdkVirtualScrollViewport;
+  @ViewChild('searchInput') searchInputRef?: ElementRef<HTMLInputElement>;
+
+  private readonly toast = inject(ToastService);
+
+  // Per-event memoization so the 8000-event fixture does not re-format each
+  // existing event when a single new one arrives. Keeps the recompute O(n).
+  private readonly formatCache = new WeakMap<ScanEvent, FormattedLine>();
+  private formatCached(e: ScanEvent): FormattedLine {
+    let r = this.formatCache.get(e);
+    if (!r) {
+      r = formatEvent(e);
+      this.formatCache.set(e, r);
+    }
+    return r;
+  }
+
+  readonly formattedLines = computed<RenderedLine[]>(() =>
+    this.events().map((e, i) => ({ line: this.formatCached(e), lineNo: i + 1 }))
+  );
+
+  readonly visibleLines = computed<RenderedLine[]>(() => {
+    const hidden = this.hiddenTypes();
+    const q = this.searchText().trim().toLowerCase();
+    return this.formattedLines().filter(({ line: l }) => {
+      if (hidden.has(l.type)) return false;
+      if (q) {
+        const hay = (l.host + ' ' + l.message).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  });
+
+  readonly activeFilterCount = computed(() => this.hiddenTypes().size);
+
+  constructor() {
+    // Auto-scroll to bottom whenever new events arrive (unless paused).
+    // The paused flag is read via untracked() so the effect only re-runs when
+    // visibleLines changes — otherwise onScrolled flipping the flag during a
+    // user scroll would re-fire this effect and yank the viewport back down.
+    effect(() => {
+      const lines = this.visibleLines();
+      const paused = untracked(() => this.autoScrollPaused());
+      if (paused) {
+        // Track how many new lines since pause for the floating pill.
+        this.newSinceScroll.update((n) => n + Math.max(0, lines.length - this.lastIndex));
+      } else {
+        // Defer to next frame so virtual scroll has measured.
+        queueMicrotask(() => this.scrollToBottom());
+      }
+      this.lastIndex = lines.length;
+    });
+  }
+
+  trackBySeq = (_i: number, r: RenderedLine) => r.line.seq;
+
+  toggleType(t: LineType) {
+    this.hiddenTypes.update((s) => {
+      const next = new Set(s);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  }
+
+  onSearch(value: string) {
+    this.searchText.set(value);
+  }
+
+  closeSearch() {
+    this.searchText.set('');
+    this.searchOpen.set(false);
+  }
+
+  /** Public hook for TerminalDockComponent's title-bar Search button. */
+  openSearch() {
+    this.searchOpen.set(true);
+    queueMicrotask(() => this.searchInputRef?.nativeElement.focus());
+  }
+
+  /** Public hook for TerminalDockComponent's title-bar Filter button. */
+  toggleFilter() {
+    this.filterOpen.update((v) => !v);
+  }
+
+  /** Force the CDK virtual scroll viewport to re-measure. Needed because the
+   *  viewport mounts inside the dock's [hidden] body and reads size 0 there;
+   *  uncollapsing the dock would otherwise leave it stuck at zero rows. */
+  refreshViewportSize() {
+    queueMicrotask(() => this.viewport?.checkViewportSize());
+  }
+
+  copyAll() {
+    const text = this.visibleLines()
+      .map(({ line: l }) => `${l.tsLabel}  ${`[${l.type}]`.padEnd(10, ' ')}  ${l.host.padEnd(30, ' ')}  ${l.message}`)
+      .join('\n');
+    navigator.clipboard.writeText(text).then(
+      () => this.toast.success('Copied', `${this.visibleLines().length} lines copied`),
+      () => this.toast.error('Copy failed')
+    );
+  }
+
+  downloadJsonl() {
+    const blob = new Blob(
+      [this.events().map((e) => JSON.stringify(redactObject(e))).join('\n')],
+      { type: 'application/x-ndjson' }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${this.scanId() || 'scan'}-events.jsonl`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  onScrolled(_index: number) {
+    if (!this.viewport) return;
+    // Pixel distance is more reliable than the rendered-range end, which
+    // includes a buffer past the visible area and can flicker around the
+    // total-1 threshold mid-scroll.
+    const distFromBottom = this.viewport.measureScrollOffset('bottom');
+    const atBottom = distFromBottom < 4;
+    if (atBottom) {
+      this.autoScrollPaused.set(false);
+      this.newSinceScroll.set(0);
+    } else {
+      this.autoScrollPaused.set(true);
+    }
+  }
+
+  jumpToLatest() {
+    this.autoScrollPaused.set(false);
+    this.newSinceScroll.set(0);
+    this.scrollToBottom();
+  }
+
+  private scrollToBottom() {
+    if (!this.viewport) return;
+    const len = this.visibleLines().length;
+    if (len > 0) this.viewport.scrollToIndex(len - 1, 'auto');
+  }
+
+  // Keyboard shortcuts on the terminal pane (when focused).
+  @HostListener('keydown', ['$event'])
+  onKey(e: KeyboardEvent) {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.key === '/') {
+      e.preventDefault();
+      this.searchOpen.set(true);
+      queueMicrotask(() => this.searchInputRef?.nativeElement.focus());
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      this.jumpToLatest();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      if (this.viewport) this.viewport.scrollToIndex(0, 'auto');
+      this.autoScrollPaused.set(true);
+    } else if (e.key === 'Escape') {
+      this.closeSearch();
+    }
+  }
+}
