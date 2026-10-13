@@ -31,7 +31,7 @@ export class ScansApi {
     firstValueFrom(this.http.get<ScanDetail>(`${this.base}/scans/${id}`));
 
   getFindings = (id: string): Promise<Finding[]> =>
-    firstValueFrom(this.http.get<Finding[]>(`${this.base}/scans/${id}/findings`));
+    firstValueFrom(this.http.get<Finding[]>(`${this.base}/scans/${id}/services`));
 
   createScan = (body: CreateScanRequest): Promise<{ scan_id: string }> =>
     firstValueFrom(this.http.post<{ scan_id: string }>(`${this.base}/scans`, body));
@@ -42,7 +42,7 @@ export class ScansApi {
     body: { excluded?: boolean; auth_method?: AuthMethod }
   ): Promise<Finding> =>
     firstValueFrom(
-      this.http.patch<Finding>(`${this.base}/scans/${scanId}/findings/${findingId}`, body)
+      this.http.patch<Finding>(`${this.base}/scans/${scanId}/services/${findingId}`, body)
     );
 
   submitScan = (id: string): Promise<{ submission_id: string }> =>

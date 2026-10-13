@@ -60,7 +60,7 @@ export const handlers = [
     return json(withSubmittedAt(s));
   }),
 
-  http.get('/api/scans/:id/findings', async ({ params }) => {
+  http.get('/api/scans/:id/services', async ({ params }) => {
     ensureLoaded();
     const id = String(params['id']);
     const f = memo.findings.get(id);
@@ -69,7 +69,7 @@ export const handlers = [
     return json(f);
   }),
 
-  http.patch('/api/scans/:id/findings/:findingId', async ({ params, request }) => {
+  http.patch('/api/scans/:id/services/:findingId', async ({ params, request }) => {
     ensureLoaded();
     const id = String(params['id']);
     const fid = String(params['findingId']);
