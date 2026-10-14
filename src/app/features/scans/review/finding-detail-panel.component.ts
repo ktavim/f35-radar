@@ -8,11 +8,6 @@ import { firstSeenOn, originLabel } from '@lib/service';
 import { isUnresolvedAuthMethod } from '@lib/verdict';
 import type { AuthMethod, Service, ServiceUrl } from '@core/models';
 
-interface EvidenceRow {
-  label: string;
-  value: string;
-}
-
 @Component({
   selector: 'app-finding-detail-panel',
   standalone: true,
@@ -60,21 +55,40 @@ interface EvidenceRow {
             <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Request count</p>
             <p class="text-sm tabular-nums">{{ f.request_count }}</p>
           </div>
-          <div>
-            <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Evidence</p>
-            @if (f.evidence; as ev) {
-              <dl class="bg-bg border border-border rounded-md p-3 space-y-2">
-                @for (row of evidenceRows(ev); track row.label) {
-                  <div>
-                    <dt class="text-[11px] text-fg-subtle">{{ row.label }}</dt>
-                    <dd class="text-xs font-mono text-fg whitespace-pre-wrap break-all">{{ row.value }}</dd>
-                  </div>
-                }
-              </dl>
-            } @else {
-              <p class="text-xs text-fg-subtle italic">No request evidence recorded for this service.</p>
+          @if (f.evidence; as ev) {
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Request</p>
+              <p class="text-xs font-mono text-fg break-all">{{ ev.method }} {{ redacted(ev.url) }}</p>
+              <p class="text-[11px] text-fg-subtle mt-0.5">seen by {{ ev.scanner }}</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Status code</p>
+              <p class="text-sm font-mono">{{ statusLabel(ev) }}</p>
+            </div>
+            @if (requestHeaders(ev); as headers) {
+              <div>
+                <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Request headers</p>
+                <pre class="bg-bg border border-border rounded-md p-3 text-xs font-mono whitespace-pre-wrap break-all">{{ headers }}</pre>
+              </div>
             }
-          </div>
+            @if (responseHeaders(ev); as headers) {
+              <div>
+                <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Response headers</p>
+                <pre class="bg-bg border border-border rounded-md p-3 text-xs font-mono whitespace-pre-wrap break-all">{{ headers }}</pre>
+              </div>
+            }
+            @if (requestHeaders(ev) || responseHeaders(ev)) {
+              <p class="text-[11px] text-fg-subtle">
+                Reconstructed from what the scanner recorded: the auth scheme it sent, the challenge
+                it received and the redirect target. Full headers are not stored.
+              </p>
+            }
+          } @else {
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Evidence</p>
+              <p class="text-xs text-fg-subtle italic">No request evidence recorded for this service.</p>
+            </div>
+          }
         </div>
         <footer class="h-14 px-4 border-t border-border flex items-center justify-end gap-2">
           @if (readonly()) {
@@ -110,25 +124,35 @@ export class FindingDetailPanelComponent {
   readonly toggleExclude = output<Service>();
   readonly setAuthMethod = output<{ finding: Service; method: AuthMethod }>();
 
+  // The server is authoritative on redaction, but anything that could carry a
+  // token is redacted again here so a misconfigured backend can't leak one.
+  redacted(value: string): string {
+    return redact(value);
+  }
+
+  /** A status of 0 means the request got no answer; the browser's reason says why. */
+  statusLabel(ev: ServiceUrl): string {
+    if (ev.status_code !== 0) return String(ev.status_code);
+    return `no response${ev.failure_reason ? ` · ${ev.failure_reason}` : ''}`;
+  }
+
   /**
-   * The winning request as label/value rows. The server is authoritative on
-   * redaction, but anything that could carry a token is redacted again here.
+   * The request's auth header as far as the scanner recorded it: the scheme
+   * alone, never the credential. Null when nothing was sent.
    */
-  evidenceRows(ev: ServiceUrl): EvidenceRow[] {
-    const rows: EvidenceRow[] = [
-      { label: 'Request', value: `${ev.method} ${redact(ev.url)}` },
-      {
-        label: 'Status',
-        value:
-          ev.status_code === 0
-            ? `no response${ev.failure_reason ? ` · ${ev.failure_reason}` : ''}`
-            : String(ev.status_code)
-      }
-    ];
-    if (ev.auth_challenge) rows.push({ label: 'WWW-Authenticate', value: redact(ev.auth_challenge) });
-    if (ev.sent_auth_scheme) rows.push({ label: 'Sent auth scheme', value: ev.sent_auth_scheme });
-    if (ev.redirect_url) rows.push({ label: 'Redirected to', value: redact(ev.redirect_url) });
-    rows.push({ label: 'Seen by', value: ev.scanner });
-    return rows;
+  requestHeaders(ev: ServiceUrl): string | null {
+    return ev.sent_auth_scheme ? redact(`Authorization: ${ev.sent_auth_scheme}`) : null;
+  }
+
+  /**
+   * The response headers the scanner recorded: the challenge, and a redirect's
+   * target with its query, fragment and userinfo already stripped. Null when
+   * the response carried neither.
+   */
+  responseHeaders(ev: ServiceUrl): string | null {
+    const lines: string[] = [];
+    if (ev.auth_challenge) lines.push(`WWW-Authenticate: ${ev.auth_challenge}`);
+    if (ev.redirect_url) lines.push(`Location: ${ev.redirect_url}`);
+    return lines.length ? redact(lines.join('\n')) : null;
   }
 }
