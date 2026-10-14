@@ -69,10 +69,11 @@ import type { AuthMethod, Service } from '@core/models';
         (selectFinding)="select($event)">
       </app-findings-section>
 
-      <!-- Already published through the F5 by a workaround the scanners can't
+      <!-- "Leakers" in brevity code: contacts that got through a defensive layer.
+           Already published through the F5 by a workaround the scanners can't
            see: nothing is left to configure, whatever auth method was detected. -->
       <app-findings-section
-        [heading]="'Already published'"
+        [heading]="'Leakers'"
         severity="published"
         [findings]="published()"
         [defaultOpen]="false"

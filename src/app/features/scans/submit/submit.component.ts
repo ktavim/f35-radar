@@ -109,8 +109,8 @@ function exportRow(f: Service) {
                     @if (f.severity === 'published') {
                       <span
                         class="inline-flex items-center px-1.5 h-5 rounded-sm text-[10px] font-medium uppercase tracking-wide bg-accent/15 text-accent border border-accent/30"
-                        title="Already published through the F5; nothing left to configure.">
-                        Published
+                        title="Leaker: already published through the F5; nothing left to configure.">
+                        Leaker
                       </span>
                     }
                     <app-auth-pill [method]="f.auth_method"></app-auth-pill>

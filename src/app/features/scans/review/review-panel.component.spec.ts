@@ -92,7 +92,7 @@ describe('ReviewPanelComponent — blockers present', () => {
 describe('ReviewPanelComponent — published services', () => {
   it('lists a published service in its own group and does not count it as a blocker', async () => {
     await setup([published('p1', 'legacy.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
-    expect(screen.getByText('Already published')).toBeInTheDocument();
+    expect(screen.getByText('Leakers')).toBeInTheDocument();
     const submit = screen.getByRole('button', { name: /submit scan/i });
     expect(submit).not.toBeDisabled();
   });
