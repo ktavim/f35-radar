@@ -47,10 +47,25 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
               </div>
             }
           </div>
-          <div>
-            <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">First seen on page</p>
-            <p class="text-sm font-mono text-fg break-all">{{ firstSeenOn(f) ?? '—' }}</p>
-          </div>
+          @if (firstSeenOn(f); as page) {
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">First seen on page</p>
+              <p class="text-sm font-mono text-fg break-all">{{ page }}</p>
+            </div>
+          }
+          @if (f.sources.length) {
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Sources</p>
+              <ul class="space-y-1">
+                @for (source of f.sources; track source.kind + ':' + source.value) {
+                  <li class="flex items-baseline gap-2">
+                    <span class="shrink-0 w-20 text-[11px] text-fg-subtle">{{ source.kind }}</span>
+                    <span class="text-xs font-mono text-fg break-all">{{ redacted(source.value) }}</span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
           <div>
             <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">URL count</p>
             <p class="text-sm tabular-nums">{{ f.request_count }}</p>

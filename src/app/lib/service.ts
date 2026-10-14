@@ -15,14 +15,13 @@ export function originLabel(origin: ServiceOrigin): string {
 
 /**
  * The page a service was first seen from: the page of its winning request,
- * else the first page the interceptor called it from, else wherever the
- * tracer found it. Null when the service has no evidence and no sources.
+ * else a page the interceptor called it from. Null when no page saw it, as
+ * for a service only the tracer found; its other sources say where it came from.
  */
 export function firstSeenOn(service: Pick<Service, 'evidence' | 'sources'>): string | null {
   const page = service.evidence?.page_url;
   if (page) return page;
-  const pageSource = service.sources.find((s) => s.kind === 'page');
-  return pageSource?.value ?? service.sources[0]?.value ?? null;
+  return service.sources.find((s) => s.kind === 'page')?.value ?? null;
 }
 
 /**
