@@ -42,7 +42,7 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
                   (methodSelected)="setAuthMethod.emit({ finding: f, method: $event })">
                 </app-auth-method-select>
                 <p class="text-[11px] text-fg-subtle">
-                  The scanners couldn't classify this — set it manually to update the verdict.
+                  The scan couldn't classify this — set it manually to update the verdict.
                 </p>
               </div>
             }
@@ -74,7 +74,7 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
             <div>
               <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Request</p>
               <p class="text-xs font-mono text-fg break-all">{{ ev.method }} {{ redacted(ev.url) }}</p>
-              <p class="text-[11px] text-fg-subtle mt-0.5">seen by {{ ev.scanner }}</p>
+              <p class="text-[11px] text-fg-subtle mt-0.5">{{ provenanceLabel(ev) }}</p>
             </div>
             <div>
               <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Status code</p>
@@ -94,7 +94,7 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
             }
             @if (requestHeaders(ev) || responseHeaders(ev)) {
               <p class="text-[11px] text-fg-subtle">
-                Reconstructed from what the scanner recorded: Full headers are not stored.
+                Reconstructed: Full headers are not stored.
               </p>
             }
           } @else {
@@ -142,6 +142,16 @@ export class FindingDetailPanelComponent {
   // token is redacted again here so a misconfigured backend can't leak one.
   redacted(value: string): string {
     return redact(value);
+  }
+
+  /**
+   * Where the request came from, in the reviewer's terms rather than the
+   * scanner's name: the interceptor records requests the page's browser made,
+   * the tracer sends probes of its own. The difference matters because a probe
+   * never carries the page's credentials, so its status says less about the app.
+   */
+  provenanceLabel(ev: ServiceUrl): string {
+    return ev.scanner === 'interceptor' ? 'Captured from the browser' : 'Sent as a probe';
   }
 
   /** A status of 0 means the request got no answer; the browser's reason says why. */
