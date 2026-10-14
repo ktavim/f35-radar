@@ -79,8 +79,7 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
             }
             @if (requestHeaders(ev) || responseHeaders(ev)) {
               <p class="text-[11px] text-fg-subtle">
-                Reconstructed from what the scanner recorded: the auth scheme it sent, the challenge
-                it received and the redirect target. Full headers are not stored.
+                Reconstructed from what the scanner recorded: Full headers are not stored.
               </p>
             }
           } @else {
@@ -137,11 +136,13 @@ export class FindingDetailPanelComponent {
   }
 
   /**
-   * The request's auth header as far as the scanner recorded it: the scheme
-   * alone, never the credential. Null when nothing was sent.
+   * The request's auth header as far as the scanner recorded it. The scanner
+   * keeps the scheme word and drops the credential after it at capture, so the
+   * stars stand for a value that was sent but never stored. Null when the
+   * request carried no Authorization header, as the tracer's probes never do.
    */
   requestHeaders(ev: ServiceUrl): string | null {
-    return ev.sent_auth_scheme ? redact(`Authorization: ${ev.sent_auth_scheme}`) : null;
+    return ev.sent_auth_scheme ? `Authorization: ${ev.sent_auth_scheme} *****` : null;
   }
 
   /**
