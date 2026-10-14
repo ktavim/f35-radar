@@ -30,6 +30,7 @@ export class StatusPillComponent {
     switch (k) {
       case 'completed':
       case 'cleared':
+      case 'published':
         return CircleCheck;
       case 'running':
         return Activity;
@@ -40,6 +41,9 @@ export class StatusPillComponent {
       case 'failed':
       case 'blocker':
         return OctagonX;
+      // partial: a scanner finished and the other failed, so a scanner's
+      // results are missing. Terminal, but it can only be rerun.
+      case 'partial':
       case 'review':
         return CircleAlert;
       default:
@@ -52,6 +56,8 @@ export class StatusPillComponent {
       case 'completed':
       case 'cleared':
         return 'var(--color-success)';
+      case 'published':
+        return 'var(--color-accent)';
       case 'running':
         return 'var(--color-info)';
       case 'queued':
@@ -61,6 +67,7 @@ export class StatusPillComponent {
       case 'failed':
       case 'blocker':
         return 'var(--color-danger)';
+      case 'partial':
       case 'review':
         return 'var(--color-warn)';
       default:

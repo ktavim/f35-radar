@@ -4,39 +4,43 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { ReviewPanelComponent } from './review-panel.component';
-import type { Finding } from '@core/models';
+import type { AuthMethod, Service, Severity } from '@core/models';
 
-const cleared = (id: string, host: string): Finding => ({
-  id,
-  host,
-  auth_method: 'oauth',
-  severity: 'cleared',
-  request_count: 1,
-  first_seen_on_page: '/',
-  evidence: { headers_snippet: '', status_code: 200 },
-  excluded: false
-});
+// The smallest service the panel accepts: found by the interceptor alone, with
+// no request evidence, so only the verdict is under test.
+function svc(id: string, host: string, auth_method: AuthMethod, severity: Severity, excluded = false): Service {
+  return {
+    id,
+    scheme: 'https',
+    host,
+    port: 443,
+    auth_method,
+    severity,
+    request_count: 1,
+    evidence: null,
+    found_by: ['interceptor'],
+    findings: [{ scanner: 'interceptor', auth_method, severity, evidence: null }],
+    sources: [],
+    excluded,
+    published_origin: null
+  };
+}
 
-const review = (id: string, host: string): Finding => ({
-  id,
-  host,
-  auth_method: 'oauth',
-  severity: 'review',
-  request_count: 1,
-  first_seen_on_page: '/',
-  evidence: { headers_snippet: '', status_code: 200 },
-  excluded: false
-});
-
-const blocker = (id: string, host: string, excluded = false): Finding => ({
-  id,
-  host,
-  auth_method: 'ntlm',
-  severity: 'blocker',
-  request_count: 1,
-  first_seen_on_page: '/',
-  evidence: { headers_snippet: '', status_code: 401 },
-  excluded
+const cleared = (id: string, host: string) => svc(id, host, 'oauth', 'cleared');
+const review = (id: string, host: string) => svc(id, host, 'unknown', 'review');
+const blocker = (id: string, host: string, excluded = false) => svc(id, host, 'ntlm', 'blocker', excluded);
+// NTLM, yet published: the registry's verdict outranks the method.
+const published = (id: string, host: string): Service => ({
+  ...svc(id, host, 'ntlm', 'published'),
+  published_origin: {
+    id: 'pub_1',
+    scheme: 'https',
+    host,
+    port: 443,
+    note: 'Published through the legacy iRule.',
+    added_by: 'f5-admin',
+    added_at: '2026-01-01T00:00:00Z'
+  }
 });
 
 interface SetupOpts {
@@ -45,7 +49,7 @@ interface SetupOpts {
   isCompleted?: boolean;
 }
 
-function setup(findings: Finding[], opts: SetupOpts = {}) {
+function setup(findings: Service[], opts: SetupOpts = {}) {
   return render(ReviewPanelComponent, {
     inputs: {
       scanId: 'scn_test',
@@ -82,6 +86,15 @@ describe('ReviewPanelComponent — blockers present', () => {
     expect(
       screen.getByText(/bandit must be excluded or remediated before submitting/i)
     ).toBeInTheDocument();
+  });
+});
+
+describe('ReviewPanelComponent — published services', () => {
+  it('lists a published service in its own group and does not count it as a blocker', async () => {
+    await setup([published('p1', 'legacy.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    expect(screen.getByText('Already published')).toBeInTheDocument();
+    const submit = screen.getByRole('button', { name: /submit scan/i });
+    expect(submit).not.toBeDisabled();
   });
 });
 

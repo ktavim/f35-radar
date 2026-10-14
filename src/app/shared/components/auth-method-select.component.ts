@@ -8,6 +8,7 @@ import {
   signal
 } from '@angular/core';
 import { Check, ChevronDown, LucideAngularModule } from 'lucide-angular';
+import { authMethodColor, authMethodLabel } from '@lib/verdict';
 import type { AuthMethod } from '@core/models';
 
 interface AuthOption {
@@ -17,9 +18,27 @@ interface AuthOption {
 }
 
 /**
- * Styled dropdown for manually classifying a finding whose auth method the
- * scraper left as "unknown". Lists only the concrete, backend-valid methods
- * (never "unknown") and mirrors the colour coding of <app-auth-pill>.
+ * The methods a person can assert by hand: every concrete scheme in the
+ * backend's vocabulary. The unresolved answers (unknown, no_response,
+ * dns_failed) are the states being corrected, so they are never options, and
+ * negotiate is left out because it is itself unresolved SPNEGO: the person
+ * picks the mechanism, Kerberos or NTLM, instead.
+ */
+const SELECTABLE_METHODS: readonly AuthMethod[] = [
+  'ntlm',
+  'kerberos',
+  'oauth',
+  'login_redirect',
+  'bearer',
+  'api_key',
+  'basic',
+  'other',
+  'unauthenticated'
+];
+
+/**
+ * Styled dropdown for manually classifying a service whose auth method the
+ * scanners could not tell. Mirrors the colour coding of <app-auth-pill>.
  */
 @Component({
   selector: 'app-auth-method-select',
@@ -71,16 +90,11 @@ export class AuthMethodSelectComponent {
   readonly methodSelected = output<AuthMethod>();
   readonly open = signal(false);
 
-  // Concrete methods only — "unknown" is the state we're correcting, so it is
-  // never an option. Kept in sync with the backend AuthMethod enum.
-  readonly options: AuthOption[] = [
-    { value: 'ntlm', label: 'NTLM', color: 'var(--color-danger)' },
-    { value: 'kerberos', label: 'KERBEROS', color: 'var(--color-success)' },
-    { value: 'oauth', label: 'OAUTH', color: 'var(--color-success)' },
-    { value: 'bearer', label: 'BEARER', color: 'var(--color-success)' },
-    { value: 'basic', label: 'BASIC', color: 'var(--color-warn)' },
-    { value: 'unauthenticated', label: 'UNAUTHENTICATED', color: 'var(--color-info)' }
-  ];
+  readonly options: AuthOption[] = SELECTABLE_METHODS.map((value) => ({
+    value,
+    label: authMethodLabel(value),
+    color: authMethodColor(value)
+  }));
 
   toggle() {
     this.open.update((v) => !v);

@@ -60,7 +60,7 @@ export class VerdictBannerComponent {
 
   readonly detail = computed(() => {
     if (this.blockerCount() > 0) {
-      return `NTLM detected on ${this.blockerCount()} ${this.blockerCount() === 1 ? 'service' : 'services'}. Exclude or change auth method, then re-scan.`;
+      return `Unsupported auth method (NTLM, Basic or an unrecognised scheme) on ${this.blockerCount()} ${this.blockerCount() === 1 ? 'service' : 'services'}. Exclude or change auth method, then re-scan.`;
     }
     return `${this.exposeCount()} external services will be exposed.`;
   });

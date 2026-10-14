@@ -206,9 +206,11 @@ export class ScanDetailComponent {
     return apps.find((a) => a.id === appId)?.name ?? appId;
   });
   readonly isRunning = computed(() => this.scan()?.status === 'running');
+  // partial: one scanner completed and the other failed. The scan has ended,
+  // but a scanner's results are missing, so it can only be rerun.
   readonly isTerminal = computed(() => {
     const s = this.scan()?.status;
-    return s === 'completed' || s === 'failed' || s === 'cancelled';
+    return s === 'completed' || s === 'partial' || s === 'failed' || s === 'cancelled';
   });
   readonly isFailed = computed(() => this.scan()?.status === 'failed');
   // A failed scan has no findings to review, so the terminal log — which now
@@ -235,7 +237,7 @@ export class ScanDetailComponent {
 
   readonly counters = computed(() => {
     let pages = this.scan()?.pages_crawled ?? 0;
-    let services = this.scan()?.external_services ?? 0;
+    let services = this.scan()?.service_count ?? 0;
     let auths = this.scan()?.auth_methods_identified ?? 0;
     let blockers = this.scan()?.blocker_count ?? 0;
     // Live counters: derive from event stream when running.
@@ -248,7 +250,7 @@ export class ScanDetailComponent {
         if (e.type === 'page_visited') p++;
         // A service is one origin, so dedupe on the whole (scheme, host, port)
         // triple: the same host on another scheme or port is another service.
-        // This must match how the server counts external_services.
+        // This must match how the server counts service_count.
         if (e.type === 'external_service_seen') {
           seen.add(
             ['scheme', 'host', 'port'].map((k) => String(e.payload[k] ?? '')).join('|')

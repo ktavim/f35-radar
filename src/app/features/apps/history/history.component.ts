@@ -22,12 +22,14 @@ import {
   useAppDiffQuery,
   useAppScansQuery
 } from '../../scans/data/scans.queries';
+import { originLabel } from '@lib/service';
 import type { AppSummary, ScanStatus } from '@core/models';
 
 const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'running', label: 'Running' },
   { key: 'completed', label: 'Completed' },
+  { key: 'partial', label: 'Partial' },
   { key: 'failed', label: 'Failed' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: 'queued', label: 'Queued' }
@@ -192,28 +194,29 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
             <span class="ml-3 text-xs text-fg-muted">
               {{ diff()!.added.length }} added · {{ diff()!.removed.length }} removed ·
               {{ diff()!.exclusion_changes.length }} exclusion changes ·
-              {{ diff()!.auth_method_changes.length }} auth changes
+              {{ diff()!.auth_method_changes.length }} auth changes ·
+              {{ diff()!.published_changes.length }} published changes
             </span>
           </header>
           <div class="divide-y divide-border">
             @for (f of diff()!.added; track 'a-' + f.id) {
               <div class="flex items-center gap-3 px-4 h-9">
                 <span class="font-mono text-success w-3">+</span>
-                <span class="font-mono text-xs text-fg flex-1 truncate">{{ f.host }}</span>
+                <span class="font-mono text-xs text-fg flex-1 truncate">{{ originLabel(f) }}</span>
                 <app-auth-pill [method]="f.auth_method"></app-auth-pill>
               </div>
             }
             @for (f of diff()!.removed; track 'r-' + f.id) {
               <div class="flex items-center gap-3 px-4 h-9">
                 <span class="font-mono text-fg-muted w-3">−</span>
-                <span class="font-mono text-xs text-fg-muted line-through flex-1 truncate">{{ f.host }}</span>
+                <span class="font-mono text-xs text-fg-muted line-through flex-1 truncate">{{ originLabel(f) }}</span>
                 <app-auth-pill [method]="f.auth_method"></app-auth-pill>
               </div>
             }
             @for (c of diff()!.exclusion_changes; track 'e-' + c.id) {
               <div class="flex items-center gap-3 px-4 h-9 text-xs">
                 <span class="font-mono w-3">~</span>
-                <span class="font-mono text-fg flex-1 truncate">{{ c.host }}</span>
+                <span class="font-mono text-fg flex-1 truncate">{{ originLabel(c) }}</span>
                 <span class="text-fg-muted">
                   {{ c.before ? 'excluded' : 'included' }} → {{ c.after ? 'excluded' : 'included' }}
                 </span>
@@ -222,8 +225,17 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
             @for (c of diff()!.auth_method_changes; track 'm-' + c.id) {
               <div class="flex items-center gap-3 px-4 h-9 text-xs">
                 <span class="font-mono w-3">~</span>
-                <span class="font-mono text-fg flex-1 truncate">{{ c.host }}</span>
+                <span class="font-mono text-fg flex-1 truncate">{{ originLabel(c) }}</span>
                 <span class="text-fg-muted font-mono uppercase">{{ c.before }} → {{ c.after }}</span>
+              </div>
+            }
+            @for (c of diff()!.published_changes; track 'p-' + c.id) {
+              <div class="flex items-center gap-3 px-4 h-9 text-xs">
+                <span class="font-mono w-3">~</span>
+                <span class="font-mono text-fg flex-1 truncate">{{ originLabel(c) }}</span>
+                <span class="text-fg-muted">
+                  {{ c.before ? 'published' : 'not published' }} → {{ c.after ? 'published' : 'not published' }}
+                </span>
               </div>
             }
           </div>
@@ -234,6 +246,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
 })
 export class HistoryComponent {
   readonly appId = input.required<string>();
+  readonly originLabel = originLabel;
 
   private readonly router = inject(Router);
   private readonly qc = injectQueryClient();

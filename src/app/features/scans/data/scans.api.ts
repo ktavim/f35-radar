@@ -7,10 +7,12 @@ import type {
   AuthMethod,
   CreateAppRequest,
   CreateScanRequest,
-  Finding,
   ScanDetail,
   ScanDiff,
-  ScanSummary
+  ScanSummary,
+  Scanner,
+  Service,
+  ServiceUrl
 } from '@core/models';
 
 @Injectable({ providedIn: 'root' })
@@ -30,8 +32,8 @@ export class ScansApi {
   getScan = (id: string): Promise<ScanDetail> =>
     firstValueFrom(this.http.get<ScanDetail>(`${this.base}/scans/${id}`));
 
-  getFindings = (id: string): Promise<Finding[]> =>
-    firstValueFrom(this.http.get<Finding[]>(`${this.base}/scans/${id}/services`));
+  getFindings = (id: string): Promise<Service[]> =>
+    firstValueFrom(this.http.get<Service[]>(`${this.base}/scans/${id}/services`));
 
   createScan = (body: CreateScanRequest): Promise<{ scan_id: string }> =>
     firstValueFrom(this.http.post<{ scan_id: string }>(`${this.base}/scans`, body));
@@ -40,9 +42,17 @@ export class ScansApi {
     scanId: string,
     findingId: string,
     body: { excluded?: boolean; auth_method?: AuthMethod }
-  ): Promise<Finding> =>
+  ): Promise<Service> =>
     firstValueFrom(
-      this.http.patch<Finding>(`${this.base}/scans/${scanId}/services/${findingId}`, body)
+      this.http.patch<Service>(`${this.base}/scans/${scanId}/services/${findingId}`, body)
+    );
+
+  /** A service's URL evidence from both scanners, or with `scanner` only that one's. */
+  listServiceUrls = (scanId: string, serviceId: string, scanner?: Scanner): Promise<ServiceUrl[]> =>
+    firstValueFrom(
+      this.http.get<ServiceUrl[]>(`${this.base}/scans/${scanId}/services/${serviceId}/urls`, {
+        params: scanner ? { scanner } : {}
+      })
     );
 
   submitScan = (id: string): Promise<{ submission_id: string }> =>

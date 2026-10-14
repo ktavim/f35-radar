@@ -14,7 +14,8 @@ import { FindingDetailPanelComponent } from './finding-detail-panel.component';
 import { ButtonComponent } from '@shared/ui/button.component';
 import { useSetAuthMethodMutation, useToggleExclusionMutation } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
-import type { AuthMethod, Finding } from '@core/models';
+import { isUnresolvedAuthMethod } from '@lib/verdict';
+import type { AuthMethod, Service } from '@core/models';
 
 @Component({
   selector: 'app-review-panel',
@@ -68,6 +69,19 @@ import type { AuthMethod, Finding } from '@core/models';
         (selectFinding)="select($event)">
       </app-findings-section>
 
+      <!-- Already published through the F5 by a workaround the scanners can't
+           see: nothing is left to configure, whatever auth method was detected. -->
+      <app-findings-section
+        [heading]="'Already published'"
+        severity="published"
+        [findings]="published()"
+        [defaultOpen]="false"
+        [highlightedId]="cursorId()"
+        [readonly]="isFrozen()"
+        (toggleExclude)="onToggle($event)"
+        (selectFinding)="select($event)">
+      </app-findings-section>
+
       <div class="flex items-center justify-between pt-4 border-t border-border">
         <p class="text-xs text-fg-muted">
           @if (isFrozen()) {
@@ -107,24 +121,26 @@ export class ReviewPanelComponent {
   private readonly toast = inject(ToastService);
 
   readonly scanId = input.required<string>();
-  readonly findings = input.required<Finding[]>();
+  readonly findings = input.required<Service[]>();
   readonly isLatestScan = input<boolean>(true);
   readonly isFrozen = input<boolean>(false);
   // Mirrors the backend rule: only `completed` scans are submittable. Default
   // true so existing call sites that don't supply this don't regress.
   readonly isCompleted = input<boolean>(true);
 
-  readonly selected = signal<Finding | null>(null);
+  readonly selected = signal<Service | null>(null);
   readonly cursorIndex = signal<number>(0);
 
   readonly blockers = computed(() => this.findings().filter((f) => f.severity === 'blocker'));
   readonly reviews = computed(() => this.findings().filter((f) => f.severity === 'review'));
   readonly cleared = computed(() => this.findings().filter((f) => f.severity === 'cleared'));
+  readonly published = computed(() => this.findings().filter((f) => f.severity === 'published'));
 
   readonly orderedAll = computed(() => [
     ...this.blockers(),
     ...this.reviews(),
-    ...this.cleared()
+    ...this.cleared(),
+    ...this.published()
   ]);
 
   readonly cursorId = computed<string | null>(() => {
@@ -190,14 +206,15 @@ export class ReviewPanelComponent {
     }
   });
 
-  select(f: Finding) {
+  select(f: Service) {
     this.selected.set(f);
   }
 
-  onSetAuthMethod(e: { finding: Finding; method: AuthMethod }) {
+  onSetAuthMethod(e: { finding: Service; method: AuthMethod }) {
     // Guard mirrors the backend: only the latest, unsubmitted scan is editable,
-    // and only findings the scraper left as "unknown" can be set manually.
-    if (this.isFrozen() || e.finding.auth_method !== 'unknown') return;
+    // and only a method the scanners could not tell (unknown, no_response,
+    // dns_failed) can be set manually.
+    if (this.isFrozen() || !isUnresolvedAuthMethod(e.finding.auth_method)) return;
     this.authMethodMutation.mutate({
       scanId: this.scanId(),
       findingId: e.finding.id,
@@ -210,7 +227,7 @@ export class ReviewPanelComponent {
     }
   }
 
-  onToggle(f: Finding) {
+  onToggle(f: Service) {
     // Frozen scans don't emit toggles from the UI; this is a belt-and-suspenders
     // guard against keyboard shortcuts or programmatic triggers.
     if (this.isFrozen()) return;

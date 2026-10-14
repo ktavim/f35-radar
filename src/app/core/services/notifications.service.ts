@@ -52,6 +52,20 @@ export class NotificationsService {
 
   private onEvent(evt: ScanEvent) {
     if (evt.type === 'scan_completed') {
+      // A partial scan also ends in scan_completed, flagged in the payload: a
+      // scanner's results are missing, so it can't be submitted and the fix is
+      // to rerun it. Say so rather than announcing a plain completion.
+      if (evt.payload['partial'] === true) {
+        const failed = Array.isArray(evt.payload['failed_scanners'])
+          ? (evt.payload['failed_scanners'] as unknown[]).map(String)
+          : [];
+        this.push({
+          scan_id: evt.scan_id,
+          title: 'Scan partially completed',
+          body: `Scan ${evt.scan_id} finished without the ${failed.length ? failed.join(' and ') : 'failed scanner'}'s results. Rerun it to submit.`
+        });
+        return;
+      }
       this.push({
         scan_id: evt.scan_id,
         title: 'Scan completed',

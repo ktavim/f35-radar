@@ -21,7 +21,20 @@ import {
   useSubmitScanMutation
 } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
-import type { AppSummary } from '@core/models';
+import { originLabel } from '@lib/service';
+import type { AppSummary, Service } from '@core/models';
+
+/** A service as the downloaded submission JSON records it. */
+function exportRow(f: Service) {
+  return {
+    origin: originLabel(f),
+    scheme: f.scheme,
+    host: f.host,
+    port: f.port,
+    auth_method: f.auth_method,
+    severity: f.severity
+  };
+}
 
 @Component({
   selector: 'app-submit',
@@ -91,8 +104,17 @@ import type { AppSummary } from '@core/models';
             <ul class="divide-y divide-border">
               @for (f of exposed(); track f.id) {
                 <li class="px-4 py-2 flex items-center justify-between gap-3">
-                  <span class="font-mono text-xs text-fg truncate">{{ f.host }}</span>
-                  <app-auth-pill [method]="f.auth_method"></app-auth-pill>
+                  <span class="font-mono text-xs text-fg truncate">{{ originLabel(f) }}</span>
+                  <span class="flex items-center gap-2 shrink-0">
+                    @if (f.severity === 'published') {
+                      <span
+                        class="inline-flex items-center px-1.5 h-5 rounded-sm text-[10px] font-medium uppercase tracking-wide bg-accent/15 text-accent border border-accent/30"
+                        title="Already published through the F5; nothing left to configure.">
+                        Published
+                      </span>
+                    }
+                    <app-auth-pill [method]="f.auth_method"></app-auth-pill>
+                  </span>
                 </li>
               }
             </ul>
@@ -111,7 +133,7 @@ import type { AppSummary } from '@core/models';
               @for (f of excluded(); track f.id) {
                 <li class="px-4 py-2">
                   <div class="flex items-center justify-between gap-3">
-                    <span class="font-mono text-xs text-fg-muted line-through truncate">{{ f.host }}</span>
+                    <span class="font-mono text-xs text-fg-muted line-through truncate">{{ originLabel(f) }}</span>
                     <app-auth-pill [method]="f.auth_method"></app-auth-pill>
                   </div>
                 </li>
@@ -148,6 +170,7 @@ import type { AppSummary } from '@core/models';
 })
 export class SubmitComponent {
   readonly icons = { Check, Copy, Download };
+  readonly originLabel = originLabel;
   readonly id = input.required<string>();
 
   private readonly router = inject(Router);
@@ -233,8 +256,8 @@ export class SubmitComponent {
       app_name: appName || null,
       submission_id: submissionId,
       submitted_at: new Date().toISOString(),
-      exposed: this.exposed().map((f) => ({ host: f.host, auth_method: f.auth_method })),
-      excluded: this.excluded().map((f) => ({ host: f.host, auth_method: f.auth_method }))
+      exposed: this.exposed().map(exportRow),
+      excluded: this.excluded().map(exportRow)
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

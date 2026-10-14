@@ -1,13 +1,18 @@
 import { http, HttpResponse, delay } from 'msw';
-import { ALL_FIXTURES, APP_NAMES, fixtureSummaries, makeEvent } from '../fixtures';
+import { ALL_FIXTURES, APP_NAMES, fixtureSummaries, makeEvent, originPayload, pagePathOf } from '../fixtures';
+import { severityForAuthMethod } from '@lib/verdict';
 import type {
   AppSummary,
+  AuthMethod,
+  AuthMethodChange,
   CreateAppRequest,
+  ExclusionChange,
   ExposureState,
-  Finding,
+  PublishedChange,
   ScanDetail,
   ScanEvent,
-  ScanSummary
+  ScanSummary,
+  Service
 } from '@core/models';
 
 /**
@@ -17,7 +22,7 @@ import type {
 const memo = {
   list: null as ScanSummary[] | null,
   details: new Map<string, ScanDetail>(),
-  findings: new Map<string, Finding[]>(),
+  services: new Map<string, Service[]>(),
   events: new Map<string, ScanEvent[]>(),
   notifications: [] as { scan_id: string; type: string; ts: number }[],
   createdApps: [] as AppSummary[],
@@ -36,7 +41,7 @@ function ensureLoaded() {
   for (const key of Object.keys(ALL_FIXTURES) as (keyof typeof ALL_FIXTURES)[]) {
     const fx = ALL_FIXTURES[key];
     memo.details.set(fx.scan.id, structuredClone(fx.scan));
-    memo.findings.set(fx.scan.id, structuredClone(fx.findings));
+    memo.services.set(fx.scan.id, structuredClone(fx.services));
     memo.events.set(fx.scan.id, structuredClone(fx.events));
   }
 }
@@ -63,19 +68,37 @@ export const handlers = [
   http.get('/api/scans/:id/services', async ({ params }) => {
     ensureLoaded();
     const id = String(params['id']);
-    const f = memo.findings.get(id);
-    if (!f) return new HttpResponse(null, { status: 404 });
+    const services = memo.services.get(id);
+    if (!services) return new HttpResponse(null, { status: 404 });
     await delay(120);
-    return json(f);
+    return json(services);
   }),
 
-  http.patch('/api/scans/:id/services/:findingId', async ({ params, request }) => {
+  // A service's URL evidence: both scanners' rows, or with ?scanner= only
+  // that one's. The fixtures keep one row per scanner, each finding's evidence.
+  http.get('/api/scans/:id/services/:serviceId/urls', async ({ params, request }) => {
     ensureLoaded();
     const id = String(params['id']);
-    const fid = String(params['findingId']);
-    const body = (await request.json()) as { excluded: boolean; justification?: string };
-    const findings = memo.findings.get(id);
-    if (!findings) return new HttpResponse(null, { status: 404 });
+    const sid = String(params['serviceId']);
+    const scanner = new URL(request.url).searchParams.get('scanner');
+    const service = (memo.services.get(id) ?? []).find((s) => s.id === sid);
+    if (!service) return new HttpResponse(null, { status: 404 });
+    const rows = service.findings
+      .flatMap((f) => (f.evidence ? [f.evidence] : []))
+      .filter((u) => !scanner || u.scanner === scanner);
+    await delay(100);
+    return json(rows);
+  }),
+
+  http.patch('/api/scans/:id/services/:serviceId', async ({ params, request }) => {
+    ensureLoaded();
+    const id = String(params['id']);
+    const sid = String(params['serviceId']);
+    // Both optional, as on the server: an exclusion toggle, a manual
+    // auth-method correction, or both.
+    const body = (await request.json()) as { excluded?: boolean; auth_method?: AuthMethod };
+    const services = memo.services.get(id);
+    if (!services) return new HttpResponse(null, { status: 404 });
     if (isScanSubmitted(id)) {
       return json({ message: 'this scan is submitted and locked' }, { status: 409 });
     }
@@ -86,14 +109,18 @@ export const handlers = [
         { status: 409 }
       );
     }
-    const idx = findings.findIndex((f) => f.id === fid);
+    const idx = services.findIndex((s) => s.id === sid);
     if (idx === -1) return new HttpResponse(null, { status: 404 });
-    findings[idx] = {
-      ...findings[idx]!,
-      excluded: body.excluded
-    };
+    const next: Service = { ...services[idx]! };
+    if (typeof body.excluded === 'boolean') next.excluded = body.excluded;
+    if (body.auth_method) {
+      next.auth_method = body.auth_method;
+      // The registry's verdict outranks the method: a published service stays published.
+      if (next.severity !== 'published') next.severity = severityForAuthMethod(body.auth_method);
+    }
+    services[idx] = next;
     await delay(150);
-    return json(findings[idx]);
+    return json(next);
   }),
 
   http.post('/api/scans', async ({ request }) => {
@@ -224,7 +251,7 @@ export const handlers = [
         app_id: appId,
         started_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
         blocker_count: i === 0 ? 0 : i,
-        finding_count: 12 - i
+        service_count: 12 - i
       }));
       await delay(80);
       return json(synth.map(withSubmittedAt));
@@ -238,22 +265,29 @@ export const handlers = [
     const url = new URL(request.url);
     const from = url.searchParams.get('from') ?? '';
     const to = url.searchParams.get('to') ?? '';
-    const fromFindings = memo.findings.get(from) ?? [];
-    const toFindings = memo.findings.get(to) ?? [];
-    const byHost = (xs: Finding[]) => new Map(xs.map((f) => [f.host, f]));
-    const A = byHost(fromFindings);
-    const B = byHost(toFindings);
-    const added = [...B.values()].filter((f) => !A.has(f.host));
-    const removed = [...A.values()].filter((f) => !B.has(f.host));
-    const exclusion_changes: { id: string; host: string; before: boolean; after: boolean }[] = [];
-    const auth_method_changes: { id: string; host: string; before: Finding['auth_method']; after: Finding['auth_method'] }[] = [];
-    for (const [host, b] of B) {
-      const a = A.get(host);
+    // Services are matched across scans by origin, the (scheme, host, port)
+    // triple, as the server keys them.
+    const key = (s: Service) => `${s.scheme}|${s.host}|${s.port}`;
+    const byOrigin = (xs: Service[]) => new Map(xs.map((s) => [key(s), s]));
+    const A = byOrigin(memo.services.get(from) ?? []);
+    const B = byOrigin(memo.services.get(to) ?? []);
+    const added = [...B.values()].filter((s) => !A.has(key(s)));
+    const removed = [...A.values()].filter((s) => !B.has(key(s)));
+    const exclusion_changes: ExclusionChange[] = [];
+    const auth_method_changes: AuthMethodChange[] = [];
+    const published_changes: PublishedChange[] = [];
+    for (const [k, b] of B) {
+      const a = A.get(k);
       if (!a) continue;
+      const origin = { id: b.id, ...originPayload(b) };
       if (a.excluded !== b.excluded)
-        exclusion_changes.push({ id: b.id, host, before: a.excluded, after: b.excluded });
+        exclusion_changes.push({ ...origin, before: a.excluded, after: b.excluded });
       if (a.auth_method !== b.auth_method)
-        auth_method_changes.push({ id: b.id, host, before: a.auth_method, after: b.auth_method });
+        auth_method_changes.push({ ...origin, before: a.auth_method, after: b.auth_method });
+      const wasPublished = a.severity === 'published';
+      const isPublished = b.severity === 'published';
+      if (wasPublished !== isPublished)
+        published_changes.push({ ...origin, before: wasPublished, after: isPublished });
     }
     await delay(120);
     return json({
@@ -262,7 +296,8 @@ export const handlers = [
       added,
       removed,
       exclusion_changes,
-      auth_method_changes
+      auth_method_changes,
+      published_changes
     });
   }),
 
@@ -325,6 +360,9 @@ function deriveExposureState(s: ScanSummary): ExposureState {
     case 'queued':
     case 'running':
       return 'never_scanned';
+    // A partial scan lacks a scanner's results, so like a failed one it can
+    // only be rerun: neither submitted nor edited.
+    case 'partial':
     case 'failed':
     case 'cancelled':
       return 'failed';
@@ -370,7 +408,7 @@ async function streamRunning(
   scanId: string
 ) {
   const detail = memo.details.get(scanId)!;
-  const findings = memo.findings.get(scanId) ?? [];
+  const services = memo.services.get(scanId) ?? [];
   let seq = (memo.events.get(scanId) ?? []).length;
 
   const emit = (e: ScanEvent) => {
@@ -382,36 +420,49 @@ async function streamRunning(
   const total = 200;
   const interval = 60_000 / total;
   let pages = 8;
-  let services = 6;
+  let seen = 6;
   const blockers = 1;
 
   for (let i = 0; i < total; i++) {
     await delay(interval);
-    const f = findings[i % findings.length]!;
+    const f = services[i % services.length]!;
     const t = Date.now();
     const r = i % 5;
     if (r === 0) {
       pages++;
-      emit(makeEvent(scanId, String(seq++), 'page_visited', { path: f.first_seen_on_page, depth: 1 + (i % 4) }, t));
+      emit(makeEvent(scanId, String(seq++), 'page_visited', { path: pagePathOf(f), depth: 1 + (i % 4) }, t));
     } else if (r === 1) {
-      services++;
-      emit(makeEvent(scanId, String(seq++), 'external_service_seen', { host: f.host }, t));
+      seen++;
+      emit(makeEvent(scanId, String(seq++), 'external_service_seen', originPayload(f), t));
     } else if (r === 2) {
       emit(makeEvent(scanId, String(seq++), 'request_observed', { host: f.host, method: 'GET', status: 200 }, t));
     } else if (r === 3) {
-      emit(makeEvent(scanId, String(seq++), 'auth_detected', { host: f.host, method: f.auth_method }, t));
+      emit(
+        makeEvent(
+          scanId,
+          String(seq++),
+          'auth_detected',
+          { ...originPayload(f), method: f.auth_method, scanner: f.found_by[0] ?? 'interceptor' },
+          t
+        )
+      );
     } else {
-      emit(makeEvent(scanId, String(seq++), 'scan_progress', { pages, services, blockers }, t));
+      emit(makeEvent(scanId, String(seq++), 'scan_progress', { pages, services: seen, blockers }, t));
     }
   }
   detail.status = 'completed';
   detail.completed_at = new Date().toISOString();
   detail.duration_ms = Date.now() - new Date(detail.started_at).getTime();
+  detail.jobs = detail.jobs.map((j) => ({ ...j, status: 'completed', completed_at: detail.completed_at }));
+  emit(makeEvent(scanId, String(seq++), 'job_completed', { scanner: 'interceptor', services: services.length }));
+  emit(makeEvent(scanId, String(seq++), 'job_completed', { scanner: 'tracer', services: services.length }));
   emit(
     makeEvent(scanId, String(seq), 'scan_completed', {
       duration_ms: detail.duration_ms,
-      findings: findings.length,
-      blockers
+      services: services.length,
+      blockers,
+      partial: false,
+      failed_scanners: []
     })
   );
 }

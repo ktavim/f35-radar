@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { authMethodColor, authMethodLabel } from '@lib/verdict';
 import type { AuthMethod } from '@core/models';
 
 @Component({
@@ -16,23 +17,9 @@ import type { AuthMethod } from '@core/models';
 export class AuthPillComponent {
   readonly method = input.required<AuthMethod>();
 
-  label = computed(() => this.method().toUpperCase());
+  label = computed(() => authMethodLabel(this.method()));
 
-  color = computed(() => {
-    switch (this.method()) {
-      case 'ntlm':
-        return 'var(--color-danger)';
-      case 'basic':
-      case 'negotiate':
-        return 'var(--color-warn)';
-      case 'unauthenticated':
-        return 'var(--color-info)';
-      case 'oauth':
-      case 'kerberos':
-      case 'bearer':
-        return 'var(--color-success)';
-      default:
-        return 'var(--color-fg-muted)';
-    }
-  });
+  // Mirrors the backend's severity for the method, so the pill and the group
+  // a service lands in never disagree.
+  color = computed(() => authMethodColor(this.method()));
 }

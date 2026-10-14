@@ -26,6 +26,6 @@ describe('VerdictBannerComponent', () => {
     });
 
     expect(screen.getByText('2 blocking issues')).toBeInTheDocument();
-    expect(screen.getByText(/NTLM detected on 2 services/)).toBeInTheDocument();
+    expect(screen.getByText(/Unsupported auth method .* on 2 services/)).toBeInTheDocument();
   });
 });

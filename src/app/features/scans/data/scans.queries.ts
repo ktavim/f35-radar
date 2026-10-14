@@ -4,19 +4,9 @@ import {
   injectQuery,
   injectQueryClient
 } from '@tanstack/angular-query-experimental';
-import type { AuthMethod, Finding, ScanDetail, Severity } from '@core/models';
+import { severityForAuthMethod } from '@lib/verdict';
+import type { AuthMethod, Service, ScanDetail } from '@core/models';
 import { ScansApi } from './scans.api';
-
-/**
- * Mirror of the backend's `severity_for` (api/translate.py) so optimistic
- * updates move a finding into the right severity group instantly. Must stay in
- * sync with the backend mapping.
- */
-function severityForAuthMethod(method: AuthMethod): Severity {
-  if (method === 'ntlm') return 'blocker';
-  if (method === 'kerberos' || method === 'unknown') return 'review';
-  return 'cleared';
-}
 
 export const scanKeys = {
   all: ['scans'] as const,
@@ -143,8 +133,8 @@ export function useToggleExclusionMutation(opts?: { onRollback?: (a: ToggleArgs)
       }),
     onMutate: async (args) => {
       await qc.cancelQueries({ queryKey: scanKeys.findings(args.scanId) });
-      const previous = qc.getQueryData<Finding[]>(scanKeys.findings(args.scanId));
-      qc.setQueryData<Finding[]>(scanKeys.findings(args.scanId), (old) =>
+      const previous = qc.getQueryData<Service[]>(scanKeys.findings(args.scanId));
+      qc.setQueryData<Service[]>(scanKeys.findings(args.scanId), (old) =>
         (old ?? []).map((f) =>
           f.id === args.findingId
             ? { ...f, excluded: args.excluded }
@@ -172,9 +162,10 @@ interface SetAuthMethodArgs {
 }
 
 /**
- * Optimistic manual auth-method correction for findings the scraper left as
- * "unknown". Updates auth_method and re-derives severity locally (mirroring the
- * backend), snapshots for rollback, and surfaces failures via onRollback.
+ * Optimistic manual auth-method correction for services whose method the
+ * scanners could not tell. Updates auth_method and re-derives severity locally
+ * (mirroring the backend), snapshots for rollback, and surfaces failures via
+ * onRollback.
  */
 export function useSetAuthMethodMutation(opts?: {
   onRollback?: (a: SetAuthMethodArgs) => void;
@@ -189,14 +180,17 @@ export function useSetAuthMethodMutation(opts?: {
       }),
     onMutate: async (args) => {
       await qc.cancelQueries({ queryKey: scanKeys.findings(args.scanId) });
-      const previous = qc.getQueryData<Finding[]>(scanKeys.findings(args.scanId));
-      qc.setQueryData<Finding[]>(scanKeys.findings(args.scanId), (old) =>
+      const previous = qc.getQueryData<Service[]>(scanKeys.findings(args.scanId));
+      qc.setQueryData<Service[]>(scanKeys.findings(args.scanId), (old) =>
         (old ?? []).map((f) =>
           f.id === args.findingId
             ? {
                 ...f,
                 auth_method: args.authMethod,
-                severity: severityForAuthMethod(args.authMethod),
+                // A published service stays published whatever its method:
+                // that verdict comes from the registry, not from the method.
+                severity:
+                  f.severity === 'published' ? 'published' : severityForAuthMethod(args.authMethod),
               }
             : f
         )

@@ -47,17 +47,18 @@ function makeScan(status: ScanDetail['status'], id = `scn_${status}`): ScanDetai
   return {
     id,
     app_id: 'app_x',
+    name: 'App X',
     url: 'https://app.intranet.contoso.com',
     status,
     started_at: new Date('2026-06-29T12:00:00Z').toISOString(),
     completed_at: terminal ? new Date('2026-06-29T12:02:00Z').toISOString() : undefined,
     started_by: 'tester',
     blocker_count: 0,
-    finding_count: 0,
+    service_count: 0,
     duration_ms: 96_000,
     pages_crawled: 4,
-    external_services: 0,
-    auth_methods_identified: 0
+    auth_methods_identified: 0,
+    jobs: []
   };
 }
 
@@ -131,6 +132,15 @@ describe('ScanDetailComponent — terminal scan stream lifecycle', () => {
     await waitFor(() => expect(cmp.isTerminal()).toBe(true));
     expect(cmp.dockStartsCollapsed()).toBe(true);
   });
+
+  // A partial scan has ended (one scanner completed, the other failed), so the
+  // dock collapses and the stream fallback applies, but it is not submittable.
+  it('treats a partial scan as terminal but not completed', async () => {
+    const { cmp } = await setup(makeScan('partial'));
+    await waitFor(() => expect(cmp.isTerminal()).toBe(true));
+    expect(cmp.isCompleted()).toBe(false);
+    expect(cmp.dockStartsCollapsed()).toBe(true);
+  });
 });
 
 describe('ScanDetailComponent — live counters', () => {
@@ -151,7 +161,7 @@ describe('ScanDetailComponent — live counters', () => {
     seen('4', 'https', 'svc.internal', 443);
 
     // Two hostnames, four services: must agree with the server's
-    // external_services, which is one per finding.
+    // service_count, which is one per origin.
     expect(cmp.counters().services).toBe(4);
   });
 });

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { severityColor } from '@lib/verdict';
 import type { Severity } from '@core/models';
 
 @Component({
@@ -9,14 +10,5 @@ import type { Severity } from '@core/models';
 })
 export class SeverityDotComponent {
   readonly severity = input.required<Severity>();
-  color = computed(() => {
-    switch (this.severity()) {
-      case 'blocker':
-        return 'var(--color-danger)';
-      case 'review':
-        return 'var(--color-warn)';
-      case 'cleared':
-        return 'var(--color-success)';
-    }
-  });
+  color = computed(() => severityColor(this.severity()));
 }

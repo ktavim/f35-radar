@@ -9,7 +9,8 @@ import { LucideAngularModule, ChevronDown, ChevronRight } from 'lucide-angular';
 import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { SeverityDotComponent } from '@shared/components/severity-dot.component';
 import { ButtonComponent } from '@shared/ui/button.component';
-import type { Finding, Severity } from '@core/models';
+import { firstSeenOn, originLabel } from '@lib/service';
+import type { Service, Severity } from '@core/models';
 
 @Component({
   selector: 'app-findings-section',
@@ -36,7 +37,7 @@ import type { Finding, Severity } from '@core/models';
           <table class="w-full text-sm">
             <thead class="bg-surface-2">
               <tr>
-                <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Host</th>
+                <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Origin</th>
                 <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Auth</th>
                 <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">First seen on</th>
                 <th class="text-right px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Requests</th>
@@ -55,13 +56,14 @@ import type { Finding, Severity } from '@core/models';
                       [class.text-fg-muted]="f.excluded"
                       [class.line-through]="f.excluded"
                       [class.text-fg]="!f.excluded">
-                    {{ f.host }}
+                    {{ originLabel(f) }}
                   </td>
                   <td class="px-4 h-10">
                     <app-auth-pill [method]="f.auth_method"></app-auth-pill>
                   </td>
-                  <td class="px-4 h-10 text-xs text-fg-muted font-mono truncate max-w-[260px]">
-                    {{ f.first_seen_on_page }}
+                  <td class="px-4 h-10 text-xs text-fg-muted font-mono truncate max-w-[260px]"
+                      [attr.title]="firstSeenOn(f)">
+                    {{ firstSeenOn(f) ?? '—' }}
                   </td>
                   <td class="px-4 h-10 text-right tabular-nums text-fg-muted">{{ f.request_count }}</td>
                   <td class="px-4 h-10">
@@ -100,18 +102,20 @@ import type { Finding, Severity } from '@core/models';
 })
 export class FindingsSectionComponent {
   readonly icons = { ChevronDown, ChevronRight };
+  readonly originLabel = originLabel;
+  readonly firstSeenOn = firstSeenOn;
 
   readonly heading = input.required<string>();
   readonly severity = input.required<Severity>();
-  readonly findings = input.required<Finding[]>();
+  readonly findings = input.required<Service[]>();
   readonly defaultOpen = input<boolean>(true);
   readonly highlightedId = input<string | null>(null);
   // When true, this scan is submitted/frozen — hide the exclusion toggle UI
   // and render rows as read-only.
   readonly readonly = input<boolean>(false);
 
-  readonly toggleExclude = output<Finding>();
-  readonly selectFinding = output<Finding>();
+  readonly toggleExclude = output<Service>();
+  readonly selectFinding = output<Service>();
 
   readonly open = signal<boolean>(false);
 
