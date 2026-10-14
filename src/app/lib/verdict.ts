@@ -60,6 +60,31 @@ export function authMethodColor(method: AuthMethod): string {
   return severityColor(severityForAuthMethod(method));
 }
 
+/**
+ * The pill's text. Every unresolved method reads UNKNOWN: `no_response` and
+ * `dns_failed` are reasons the scanner could not tell the method, not methods,
+ * and the pill answers "which method". The reason itself is for the detail
+ * panel, see `unresolvedReason`.
+ */
 export function authMethodLabel(method: AuthMethod): string {
+  if (isUnresolvedAuthMethod(method)) return 'UNKNOWN';
   return method.replace(/_/g, ' ').toUpperCase();
+}
+
+/**
+ * Why an unresolved method is unresolved, in the reviewer's terms. Derived
+ * from the verdict alone, so it can be shown whether or not the service kept
+ * a request as evidence. Null for a resolved method.
+ */
+export function unresolvedReason(method: AuthMethod): string | null {
+  switch (method) {
+    case 'dns_failed':
+      return "The host name didn't resolve, so the method couldn't be checked.";
+    case 'no_response':
+      return "The host didn't respond, so the method couldn't be checked.";
+    case 'unknown':
+      return "The scan couldn't classify the response.";
+    default:
+      return null;
+  }
 }

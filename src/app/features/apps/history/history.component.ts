@@ -23,6 +23,7 @@ import {
   useAppScansQuery
 } from '../../scans/data/scans.queries';
 import { originLabel } from '@lib/service';
+import { authMethodLabel } from '@lib/verdict';
 import type { AppSummary, ScanStatus } from '@core/models';
 
 const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
@@ -226,7 +227,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
               <div class="flex items-center gap-3 px-4 h-9 text-xs">
                 <span class="font-mono w-3">~</span>
                 <span class="font-mono text-fg flex-1 truncate">{{ originLabel(c) }}</span>
-                <span class="text-fg-muted font-mono uppercase">{{ c.before }} → {{ c.after }}</span>
+                <span class="text-fg-muted font-mono">{{ authMethodLabel(c.before) }} → {{ authMethodLabel(c.after) }}</span>
               </div>
             }
             @for (c of diff()!.published_changes; track 'p-' + c.id) {
@@ -247,6 +248,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
 export class HistoryComponent {
   readonly appId = input.required<string>();
   readonly originLabel = originLabel;
+  readonly authMethodLabel = authMethodLabel;
 
   private readonly router = inject(Router);
   private readonly qc = injectQueryClient();

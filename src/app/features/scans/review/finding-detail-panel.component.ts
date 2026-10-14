@@ -5,7 +5,7 @@ import { AuthMethodSelectComponent } from '@shared/components/auth-method-select
 import { ButtonComponent } from '@shared/ui/button.component';
 import { redact } from '@lib/redact';
 import { firstSeenOn, originLabel } from '@lib/service';
-import { isUnresolvedAuthMethod } from '@lib/verdict';
+import { unresolvedReason } from '@lib/verdict';
 import type { AuthMethod, Service, ServiceUrl } from '@core/models';
 
 @Component({
@@ -36,15 +36,19 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
             <div class="flex items-center gap-2">
               <app-auth-pill [method]="f.auth_method"></app-auth-pill>
             </div>
-            @if (isUnresolved(f.auth_method) && !readonly()) {
-              <div class="mt-2 space-y-1">
-                <app-auth-method-select
-                  (methodSelected)="setAuthMethod.emit({ finding: f, method: $event })">
-                </app-auth-method-select>
-                <p class="text-[11px] text-fg-subtle">
-                  The scan couldn't classify this — set it manually to update the verdict.
-                </p>
-              </div>
+            @if (unresolvedReason(f.auth_method); as reason) {
+              <!-- Why the pill reads UNKNOWN. Comes from the verdict, not the
+                   evidence, so it shows on a locked scan and on a service
+                   that kept no request. -->
+              <p class="text-[11px] text-fg-subtle mt-1">{{ reason }}</p>
+              @if (!readonly()) {
+                <div class="mt-2 space-y-1">
+                  <app-auth-method-select
+                    (methodSelected)="setAuthMethod.emit({ finding: f, method: $event })">
+                  </app-auth-method-select>
+                  <p class="text-[11px] text-fg-subtle">Set it manually to update the verdict.</p>
+                </div>
+              }
             }
           </div>
           @if (firstSeenOn(f); as page) {
@@ -137,7 +141,7 @@ export class FindingDetailPanelComponent {
   readonly icons = { X };
   readonly originLabel = originLabel;
   readonly firstSeenOn = firstSeenOn;
-  readonly isUnresolved = isUnresolvedAuthMethod;
+  readonly unresolvedReason = unresolvedReason;
 
   readonly finding = input<Service | null>(null);
   readonly readonly = input<boolean>(false);
