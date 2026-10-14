@@ -1,3 +1,4 @@
+import { redact } from '@lib/redact';
 import type { Service, ServiceOrigin } from '@core/models';
 
 const DEFAULT_PORTS: Readonly<Record<string, number>> = { http: 80, https: 443 };
@@ -22,4 +23,17 @@ export function firstSeenOn(service: Pick<Service, 'evidence' | 'sources'>): str
   if (page) return page;
   const pageSource = service.sources.find((s) => s.kind === 'page');
   return pageSource?.value ?? service.sources[0]?.value ?? null;
+}
+
+/**
+ * A request URL's path, for showing beside an origin that already names the
+ * host. The query is dropped since it is where a token would sit. A URL that
+ * does not parse is returned as given, redacted.
+ */
+export function requestPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return redact(url);
+  }
 }

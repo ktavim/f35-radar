@@ -9,8 +9,9 @@ import { LucideAngularModule, ChevronDown, ChevronRight } from 'lucide-angular';
 import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { SeverityDotComponent } from '@shared/components/severity-dot.component';
 import { ButtonComponent } from '@shared/ui/button.component';
-import { firstSeenOn, originLabel } from '@lib/service';
-import type { Service, Severity } from '@core/models';
+import { redact } from '@lib/redact';
+import { originLabel, requestPath } from '@lib/service';
+import type { Service, ServiceUrl, Severity } from '@core/models';
 
 @Component({
   selector: 'app-findings-section',
@@ -39,8 +40,8 @@ import type { Service, Severity } from '@core/models';
               <tr>
                 <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Origin</th>
                 <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Auth</th>
-                <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">First seen on</th>
-                <th class="text-right px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Requests</th>
+                <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Request</th>
+                <th class="text-right px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">URLs</th>
                 <th class="text-right px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted w-48">Action</th>
               </tr>
             </thead>
@@ -62,8 +63,8 @@ import type { Service, Severity } from '@core/models';
                     <app-auth-pill [method]="f.auth_method"></app-auth-pill>
                   </td>
                   <td class="px-4 h-10 text-xs text-fg-muted font-mono truncate max-w-[260px]"
-                      [attr.title]="firstSeenOn(f)">
-                    {{ firstSeenOn(f) ?? '—' }}
+                      [attr.title]="f.evidence ? requestTitle(f.evidence) : null">
+                    {{ f.evidence ? requestLabel(f.evidence) : '—' }}
                   </td>
                   <td class="px-4 h-10 text-right tabular-nums text-fg-muted">{{ f.request_count }}</td>
                   <td class="px-4 h-10">
@@ -103,7 +104,6 @@ import type { Service, Severity } from '@core/models';
 export class FindingsSectionComponent {
   readonly icons = { ChevronDown, ChevronRight };
   readonly originLabel = originLabel;
-  readonly firstSeenOn = firstSeenOn;
 
   readonly heading = input.required<string>();
   readonly severity = input.required<Severity>();
@@ -118,6 +118,20 @@ export class FindingsSectionComponent {
   readonly selectFinding = output<Service>();
 
   readonly open = signal<boolean>(false);
+
+  /**
+   * The evidence request as `METHOD /path`. The host is already in the Origin
+   * column, and the query stays out of the cell since it is where a token
+   * would sit; the tooltip carries the whole URL.
+   */
+  requestLabel(ev: ServiceUrl): string {
+    return `${ev.method} ${requestPath(ev.url)}`;
+  }
+
+  /** The whole request for the cell's tooltip, redacted again client-side like the detail panel does. */
+  requestTitle(ev: ServiceUrl): string {
+    return `${ev.method} ${redact(ev.url)}`;
+  }
 
   constructor() {
     // Default open if non-empty (for blocker/review) or closed (cleared).

@@ -52,7 +52,7 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
             <p class="text-sm font-mono text-fg break-all">{{ firstSeenOn(f) ?? '—' }}</p>
           </div>
           <div>
-            <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Request count</p>
+            <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">URL count</p>
             <p class="text-sm tabular-nums">{{ f.request_count }}</p>
           </div>
           @if (f.evidence; as ev) {
