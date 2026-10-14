@@ -76,10 +76,17 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
               <p class="text-xs font-mono text-fg break-all">{{ ev.method }} {{ redacted(ev.url) }}</p>
               <p class="text-[11px] text-fg-subtle mt-0.5">{{ provenanceLabel(ev) }}</p>
             </div>
-            <div>
-              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Status code</p>
-              <p class="text-sm font-mono">{{ statusLabel(ev) }}</p>
-            </div>
+            @if (ev.status_code === 0) {
+              <div>
+                <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Error</p>
+                <p class="text-sm font-mono">{{ ev.failure_reason || 'no response recorded' }}</p>
+              </div>
+            } @else {
+              <div>
+                <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Status code</p>
+                <p class="text-sm font-mono">{{ ev.status_code }}</p>
+              </div>
+            }
             @if (requestHeaders(ev); as headers) {
               <div>
                 <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Request headers</p>
@@ -152,12 +159,6 @@ export class FindingDetailPanelComponent {
    */
   provenanceLabel(ev: ServiceUrl): string {
     return ev.scanner === 'interceptor' ? 'Captured from the browser' : 'Sent as a probe';
-  }
-
-  /** A status of 0 means the request got no answer; the browser's reason says why. */
-  statusLabel(ev: ServiceUrl): string {
-    if (ev.status_code !== 0) return String(ev.status_code);
-    return `no response${ev.failure_reason ? ` · ${ev.failure_reason}` : ''}`;
   }
 
   /**
