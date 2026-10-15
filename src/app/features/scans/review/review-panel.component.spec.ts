@@ -124,9 +124,9 @@ describe('ReviewPanelComponent — non-completed scan', () => {
 });
 
 describe('ReviewPanelComponent — frozen scan', () => {
-  it('hides the exclusion toggle buttons and disables Submit', async () => {
+  it('disables the Include checkboxes and Submit', async () => {
     // Use `review` severity so the section opens by default and would normally
-    // show Exclude buttons — proving the frozen flag actually suppresses them.
+    // show enabled checkboxes — proving the frozen flag actually locks them.
     await setup([review('r1', 'a.contoso.com'), review('r2', 'b.contoso.com')], {
       isFrozen: true
     });
@@ -135,14 +135,17 @@ describe('ReviewPanelComponent — frozen scan', () => {
     expect(
       screen.getByText(/only the latest completed scan can be edited/i)
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^exclude$/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^re-include$/i })).toBeNull();
+    const boxes = screen.getAllByRole('checkbox', { name: /^include /i });
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) expect(box).toBeDisabled();
   });
 
-  it('shows Exclude buttons normally when the scan is not frozen', async () => {
-    // Sanity check: with the same fixtures but isFrozen=false the buttons appear.
+  it('enables the Include checkboxes when the scan is not frozen', async () => {
+    // Sanity check: with the same fixtures but isFrozen=false the checkbox is editable.
     await setup([review('r1', 'a.contoso.com')], { isFrozen: false });
-    expect(screen.getByRole('button', { name: /^exclude$/i })).toBeInTheDocument();
+    const box = screen.getByRole('checkbox', { name: /^include /i });
+    expect(box).toBeEnabled();
+    expect(box).toBeChecked();
   });
 });
 

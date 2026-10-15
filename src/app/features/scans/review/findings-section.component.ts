@@ -9,7 +9,6 @@ import {
 import { LucideAngularModule, ChevronDown, ChevronRight } from 'lucide-angular';
 import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { SeverityDotComponent } from '@shared/components/severity-dot.component';
-import { ButtonComponent } from '@shared/ui/button.component';
 import { redact } from '@lib/redact';
 import { originLabel, requestPath } from '@lib/service';
 import type { Service, ServiceUrl, Severity } from '@core/models';
@@ -17,7 +16,7 @@ import type { Service, ServiceUrl, Severity } from '@core/models';
 @Component({
   selector: 'app-findings-section',
   standalone: true,
-  imports: [LucideAngularModule, AuthPillComponent, SeverityDotComponent, ButtonComponent],
+  imports: [LucideAngularModule, AuthPillComponent, SeverityDotComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="border border-border rounded-md bg-surface mb-3">
@@ -45,7 +44,7 @@ import type { Service, ServiceUrl, Severity } from '@core/models';
                 <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Auth</th>
                 <th class="text-left px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">Request</th>
                 <th class="text-right px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted">URLs</th>
-                <th class="text-right px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted w-48">Action</th>
+                <th class="text-center px-4 h-8 text-xs uppercase tracking-wide font-medium text-fg-muted w-24">Include</th>
               </tr>
             </thead>
             <tbody>
@@ -73,28 +72,22 @@ import type { Service, ServiceUrl, Severity } from '@core/models';
                     {{ f.evidence ? requestLabel(f.evidence) : '—' }}
                   </td>
                   <td class="px-4 h-10 text-right tabular-nums text-fg-muted" [class.opacity-60]="f.excluded">{{ f.request_count }}</td>
-                  <td class="px-4 h-10">
-                    @if (!readonly()) {
-                      <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-                      <div class="flex justify-end gap-2" (click)="$event.stopPropagation()">
-                        @if (f.excluded) {
-                          <app-button variant="ghost" size="sm" (click)="toggleExclude.emit(f)">
-                            Re-include
-                          </app-button>
-                        } @else {
-                          <app-button
-                            variant="secondary"
-                            size="sm"
-                            (click)="toggleExclude.emit(f)">
-                            Exclude
-                          </app-button>
-                        }
-                      </div>
-                    } @else {
-                      <span class="text-xs text-fg-subtle italic block text-right">
-                        {{ f.excluded ? 'excluded' : 'included' }}
-                      </span>
-                    }
+                  <td class="p-0 h-10">
+                    <!-- The whole cell is the hit target; stopPropagation keeps the row from opening the drawer. -->
+                    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+                    <label
+                      class="flex items-center justify-center w-full h-10"
+                      [class.cursor-pointer]="!readonly()"
+                      (click)="$event.stopPropagation()">
+                      <input
+                        type="checkbox"
+                        class="accent-accent"
+                        [class.cursor-pointer]="!readonly()"
+                        [checked]="!f.excluded"
+                        [disabled]="readonly()"
+                        [attr.aria-label]="'Include ' + originLabel(f)"
+                        (change)="toggleExclude.emit(f)" />
+                    </label>
                   </td>
                 </tr>
               }
@@ -121,8 +114,8 @@ export class FindingsSectionComponent {
   // to collapse, the tab already names the group and its count.
   readonly collapsible = input<boolean>(true);
   readonly highlightedId = input<string | null>(null);
-  // When true, this scan is submitted/frozen — hide the exclusion toggle UI
-  // and render rows as read-only.
+  // When true, this scan is submitted/frozen — the Include checkboxes are
+  // disabled and rows are read-only.
   readonly readonly = input<boolean>(false);
 
   readonly toggleExclude = output<Service>();
