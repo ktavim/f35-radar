@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen } from '@testing-library/angular';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
@@ -92,7 +92,7 @@ describe('ReviewPanelComponent — blockers present', () => {
 describe('ReviewPanelComponent — published services', () => {
   it('lists a published service in its own group and does not count it as a blocker', async () => {
     await setup([published('p1', 'legacy.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
-    expect(screen.getByText('Leakers')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /leakers \(1\)/i })).toBeInTheDocument();
     const submit = screen.getByRole('button', { name: /submit scan/i });
     expect(submit).not.toBeDisabled();
   });
@@ -138,5 +138,68 @@ describe('ReviewPanelComponent — frozen scan', () => {
     // Sanity check: with the same fixtures but isFrozen=false the buttons appear.
     await setup([review('r1', 'a.contoso.com')], { isFrozen: false });
     expect(screen.getByRole('button', { name: /^exclude$/i })).toBeInTheDocument();
+  });
+});
+
+describe('ReviewPanelComponent — tabs', () => {
+  it('opens on Bandits when there are any, even all excluded', async () => {
+    await setup([blocker('b1', 'auth.contoso.com', true), review('r1', 'a.contoso.com')]);
+    expect(screen.getByRole('tab', { name: /bandits/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens on Bogeys when there are no bandits', async () => {
+    await setup([review('r1', 'a.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    expect(screen.getByRole('tab', { name: /bogeys/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens on All when nothing needs a decision', async () => {
+    await setup([cleared('c1', 'cdn.contoso.com'), published('p1', 'legacy.contoso.com')]);
+    expect(screen.getByRole('tab', { name: /all \(2\)/i })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('lists every group on the All tab, Friendlies collapsed', async () => {
+    await setup([blocker('b1', 'auth.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    fireEvent.click(screen.getByRole('tab', { name: /all/i }));
+    expect(await screen.findByText('https://auth.contoso.com')).toBeInTheDocument();
+    expect(screen.queryByText('https://cdn.contoso.com')).toBeNull();
+  });
+
+  it('shows only the chosen group, expanded, on its own tab', async () => {
+    await setup([blocker('b1', 'auth.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    fireEvent.click(screen.getByRole('tab', { name: /friendlies/i }));
+    expect(await screen.findByText('https://cdn.contoso.com')).toBeInTheDocument();
+    expect(screen.queryByText('https://auth.contoso.com')).toBeNull();
+  });
+
+  it('moves between tabs with the arrow keys', async () => {
+    await setup([blocker('b1', 'auth.contoso.com')]);
+    fireEvent.keyDown(screen.getByRole('tab', { name: /bandits/i }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: /bogeys/i })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('ReviewPanelComponent — keyboard cursor', () => {
+  it('never toggles a finding in a collapsed group', async () => {
+    const { fixture } = await setup([blocker('b1', 'auth.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    const panel = fixture.componentInstance;
+    const toggled: string[] = [];
+    panel.onToggle = (f) => void toggled.push(f.id);
+
+    // On All, only the Bandits row is on screen, so j cannot walk into the collapsed Friendlies.
+    fireEvent.click(screen.getByRole('tab', { name: /all/i }));
+    fireEvent.keyDown(window, { key: 'j' });
+    fireEvent.keyDown(window, { key: 'x' });
+    expect(toggled).toEqual(['b1']);
+  });
+
+  it('acts on the active tab’s rows', async () => {
+    const { fixture } = await setup([blocker('b1', 'auth.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    const panel = fixture.componentInstance;
+    const toggled: string[] = [];
+    panel.onToggle = (f) => void toggled.push(f.id);
+
+    fireEvent.click(screen.getByRole('tab', { name: /friendlies/i }));
+    fireEvent.keyDown(window, { key: 'x' });
+    expect(toggled).toEqual(['c1']);
   });
 });

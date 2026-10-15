@@ -1,21 +1,41 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
   computed,
   inject,
   input,
   signal
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { VerdictBannerComponent } from './verdict-banner.component';
 import { FindingsSectionComponent } from './findings-section.component';
 import { FindingDetailPanelComponent } from './finding-detail-panel.component';
 import { ButtonComponent } from '@shared/ui/button.component';
+import { SeverityDotComponent } from '@shared/components/severity-dot.component';
 import { useSetAuthMethodMutation, useToggleExclusionMutation } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
 import { isUnresolvedAuthMethod } from '@lib/verdict';
-import type { AuthMethod, Service } from '@core/models';
+import type { AuthMethod, Service, Severity } from '@core/models';
+
+type Tab = 'all' | Severity;
+
+const GROUPS: { key: Severity; heading: string }[] = [
+  { key: 'blocker', heading: 'Bandits' },
+  { key: 'review', heading: 'Bogeys' },
+  { key: 'cleared', heading: 'Friendlies' },
+  // "Leakers" in brevity code: contacts that got through a defensive layer.
+  // Already published through the F5 by a workaround the scanners can't
+  // see: nothing is left to configure, whatever auth method was detected.
+  { key: 'published', heading: 'Leakers' }
+];
+
+const TABS: Tab[] = ['all', ...GROUPS.map((g) => g.key)];
+
+function parseTab(value: string | null): Tab | null {
+  return TABS.find((t) => t === value) ?? null;
+}
 
 @Component({
   selector: 'app-review-panel',
@@ -24,7 +44,8 @@ import type { AuthMethod, Service } from '@core/models';
     VerdictBannerComponent,
     FindingsSectionComponent,
     FindingDetailPanelComponent,
-    ButtonComponent
+    ButtonComponent,
+    SeverityDotComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { tabindex: '-1' },
@@ -36,52 +57,56 @@ import type { AuthMethod, Service } from '@core/models';
         [exposeCount]="exposeCount()">
       </app-verdict-banner>
 
-      <app-findings-section
-        [heading]="'Bandits'"
-        severity="blocker"
-        [findings]="blockers()"
-        [defaultOpen]="blockers().length > 0"
-        [highlightedId]="cursorId()"
-        [readonly]="isFrozen()"
-        (toggleExclude)="onToggle($event)"
-        (selectFinding)="select($event)">
-      </app-findings-section>
+      <div>
+        <div
+          role="tablist"
+          aria-label="Findings"
+          class="flex items-center gap-1 border-b border-border mb-4">
+          @for (t of tabs(); track t.key) {
+            <button
+              type="button"
+              role="tab"
+              (keydown)="onTabKey($event)"
+              class="flex items-center gap-2 px-3 h-9 -mb-px border-b-2 text-sm hover:text-fg"
+              [id]="'review-tab-' + t.key"
+              [attr.aria-selected]="activeTab() === t.key"
+              aria-controls="review-tabpanel"
+              [attr.tabindex]="activeTab() === t.key ? 0 : -1"
+              [class.border-accent]="activeTab() === t.key"
+              [class.text-fg]="activeTab() === t.key"
+              [class.font-medium]="activeTab() === t.key"
+              [class.border-transparent]="activeTab() !== t.key"
+              [class.text-fg-muted]="activeTab() !== t.key"
+              (click)="selectTab(t.key)">
+              @if (t.key !== 'all') {
+                <app-severity-dot [severity]="t.key"></app-severity-dot>
+              }
+              <span>{{ t.label }}</span>
+              <span class="text-xs text-fg-muted tabular-nums">({{ t.count }})</span>
+            </button>
+          }
+        </div>
 
-      <app-findings-section
-        [heading]="'Bogeys'"
-        severity="review"
-        [findings]="reviews()"
-        [defaultOpen]="reviews().length > 0"
-        [highlightedId]="cursorId()"
-        [readonly]="isFrozen()"
-        (toggleExclude)="onToggle($event)"
-        (selectFinding)="select($event)">
-      </app-findings-section>
-
-      <app-findings-section
-        [heading]="'Friendlies'"
-        severity="cleared"
-        [findings]="cleared()"
-        [defaultOpen]="false"
-        [highlightedId]="cursorId()"
-        [readonly]="isFrozen()"
-        (toggleExclude)="onToggle($event)"
-        (selectFinding)="select($event)">
-      </app-findings-section>
-
-      <!-- "Leakers" in brevity code: contacts that got through a defensive layer.
-           Already published through the F5 by a workaround the scanners can't
-           see: nothing is left to configure, whatever auth method was detected. -->
-      <app-findings-section
-        [heading]="'Leakers'"
-        severity="published"
-        [findings]="published()"
-        [defaultOpen]="false"
-        [highlightedId]="cursorId()"
-        [readonly]="isFrozen()"
-        (toggleExclude)="onToggle($event)"
-        (selectFinding)="select($event)">
-      </app-findings-section>
+        <div
+          role="tabpanel"
+          id="review-tabpanel"
+          [attr.aria-labelledby]="'review-tab-' + activeTab()">
+          @for (g of shownGroups(); track g.key) {
+            <app-findings-section
+              [heading]="g.heading"
+              [severity]="g.key"
+              [findings]="g.findings"
+              [collapsible]="activeTab() === 'all'"
+              [open]="openState()[g.key]"
+              (openChange)="setOpen(g.key, $event)"
+              [highlightedId]="cursorId()"
+              [readonly]="isFrozen()"
+              (toggleExclude)="onToggle($event)"
+              (selectFinding)="select($event)">
+            </app-findings-section>
+          }
+        </div>
+      </div>
 
       <div class="flex items-center justify-between pt-4 border-t border-border">
         <p class="text-xs text-fg-muted">
@@ -119,6 +144,8 @@ import type { AuthMethod, Service } from '@core/models';
 })
 export class ReviewPanelComponent {
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly toast = inject(ToastService);
 
   readonly scanId = input.required<string>();
@@ -130,25 +157,77 @@ export class ReviewPanelComponent {
   readonly isCompleted = input<boolean>(true);
 
   readonly selected = signal<Service | null>(null);
-  readonly cursorIndex = signal<number>(0);
 
-  readonly blockers = computed(() => this.findings().filter((f) => f.severity === 'blocker'));
-  readonly reviews = computed(() => this.findings().filter((f) => f.severity === 'review'));
-  readonly cleared = computed(() => this.findings().filter((f) => f.severity === 'cleared'));
-  readonly published = computed(() => this.findings().filter((f) => f.severity === 'published'));
+  // The tab the user picked, kept in the URL (?tab=) so a reload or a shared
+  // link lands on the same tab. Null until they pick one.
+  private readonly chosenTab = signal<Tab | null>(
+    parseTab(this.route.snapshot.queryParamMap.get('tab'))
+  );
 
-  readonly orderedAll = computed(() => [
-    ...this.blockers(),
-    ...this.reviews(),
-    ...this.cleared(),
-    ...this.published()
+  readonly groups = computed(() =>
+    GROUPS.map((g) => ({
+      ...g,
+      findings: this.findings().filter((f) => f.severity === g.key)
+    }))
+  );
+
+  // Without a pick, open on the first group that needs a decision: Bandits, then
+  // Bogeys, else the All overview. Counted with excluded findings included, so
+  // excluding the last bandit does not yank the user off the tab they work in.
+  private readonly defaultTab = computed<Tab>(
+    () =>
+      this.groups().find(
+        (g) => (g.key === 'blocker' || g.key === 'review') && g.findings.length > 0
+      )?.key ?? 'all'
+  );
+
+  readonly activeTab = computed<Tab>(() => this.chosenTab() ?? this.defaultTab());
+
+  readonly tabs = computed(() => [
+    { key: 'all' as Tab, label: 'All', count: this.findings().length },
+    ...this.groups().map((g) => ({ key: g.key as Tab, label: g.heading, count: g.findings.length }))
   ]);
 
-  readonly cursorId = computed<string | null>(() => {
-    const list = this.orderedAll();
-    const i = this.cursorIndex();
-    return list[i]?.id ?? null;
+  readonly shownGroups = computed(() => {
+    const tab = this.activeTab();
+    return tab === 'all' ? this.groups() : this.groups().filter((g) => g.key === tab);
   });
+
+  // Which groups are expanded on the All tab. Bandits and Bogeys start open when
+  // they have findings, until the user toggles a group themselves.
+  private readonly openOverrides = signal<Partial<Record<Severity, boolean>>>({});
+
+  readonly openState = computed(() => {
+    const overrides = this.openOverrides();
+    const state = {} as Record<Severity, boolean>;
+    for (const g of this.groups()) {
+      state[g.key] =
+        overrides[g.key] ?? ((g.key === 'blocker' || g.key === 'review') && g.findings.length > 0);
+    }
+    return state;
+  });
+
+  // The rows on screen, in display order: the active tab's group, or on the All
+  // tab every expanded group. The keyboard cursor only ever moves over these.
+  readonly visibleFindings = computed(() => {
+    const open = this.openState();
+    return this.shownGroups()
+      .filter((g) => this.activeTab() !== 'all' || open[g.key])
+      .flatMap((g) => g.findings);
+  });
+
+  private readonly cursor = signal<string | null>(null);
+
+  // The row j/k/x/Enter act on. Tracked by id, and when that row is not on screen
+  // (another tab, a collapsed group) it falls back to the first visible row, so
+  // `x` can never exclude a finding the user cannot see.
+  readonly cursorId = computed<string | null>(() => {
+    const list = this.visibleFindings();
+    const id = this.cursor();
+    return list.some((f) => f.id === id) ? id : (list[0]?.id ?? null);
+  });
+
+  readonly blockers = computed(() => this.findings().filter((f) => f.severity === 'blocker'));
 
   readonly unexcludedBlockers = computed(() =>
     this.blockers().filter((f) => !f.excluded)
@@ -211,6 +290,35 @@ export class ReviewPanelComponent {
     this.selected.set(f);
   }
 
+  selectTab(tab: Tab) {
+    this.chosenTab.set(tab);
+    this.router.navigate([], {
+      relativeTo: this.route,
+      // Written even for All: the default is not All when there are bandits.
+      queryParams: { tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+  }
+
+  setOpen(key: Severity, open: boolean) {
+    this.openOverrides.update((o) => ({ ...o, [key]: open }));
+  }
+
+  // Arrow keys move between tabs and select as they go (WAI-ARIA tabs pattern).
+  onTabKey(e: KeyboardEvent) {
+    const i = TABS.indexOf(this.activeTab());
+    let next: number;
+    if (e.key === 'ArrowRight') next = (i + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft') next = (i - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = TABS.length - 1;
+    else return;
+    e.preventDefault();
+    this.selectTab(TABS[next]);
+    this.host.nativeElement.querySelector<HTMLElement>(`#review-tab-${TABS[next]}`)?.focus();
+  }
+
   onSetAuthMethod(e: { finding: Service; method: AuthMethod }) {
     // Guard mirrors the backend: only the latest, unsubmitted scan is editable,
     // and only a method the scanners could not tell (unknown, no_response,
@@ -244,31 +352,46 @@ export class ReviewPanelComponent {
     this.router.navigate(['/scans', this.scanId(), 'submit']);
   }
 
+  private moveCursor(step: number) {
+    const list = this.visibleFindings();
+    if (list.length === 0) return;
+    const i = list.findIndex((f) => f.id === this.cursorId());
+    this.cursor.set(list[Math.max(0, Math.min(list.length - 1, i + step))].id);
+  }
+
+  private cursorFinding(): Service | undefined {
+    const id = this.cursorId();
+    return this.visibleFindings().find((f) => f.id === id);
+  }
+
   // j/k/x shortcuts for review screen.
   @HostListener('window:keydown', ['$event'])
   onKey(e: KeyboardEvent) {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    const max = this.orderedAll().length;
-    if (max === 0) return;
     if (e.key === 'j') {
       e.preventDefault();
-      this.cursorIndex.update((i) => Math.min(max - 1, i + 1));
+      this.moveCursor(1);
     } else if (e.key === 'k') {
       e.preventDefault();
-      this.cursorIndex.update((i) => Math.max(0, i - 1));
+      this.moveCursor(-1);
+    } else if (e.key === ']' || e.key === '[') {
+      e.preventDefault();
+      const step = e.key === ']' ? 1 : -1;
+      const i = TABS.indexOf(this.activeTab());
+      this.selectTab(TABS[(i + step + TABS.length) % TABS.length]);
     } else if (e.key === 'x') {
       e.preventDefault();
       if (this.isFrozen()) return;
-      const f = this.orderedAll()[this.cursorIndex()];
+      const f = this.cursorFinding();
       if (f) this.onToggle(f);
     } else if (e.key === '?') {
       e.preventDefault();
       this.toast.info(
         'Shortcuts',
-        'j/k: navigate · x: toggle exclusion · /: search log · End: jump to latest'
+        'j/k: navigate · x: toggle exclusion · [/]: switch tab · /: search log · End: jump to latest'
       );
     } else if (e.key === 'Enter') {
-      const f = this.orderedAll()[this.cursorIndex()];
+      const f = this.cursorFinding();
       if (f) this.select(f);
     } else if (e.key === 'Escape') {
       this.selected.set(null);
