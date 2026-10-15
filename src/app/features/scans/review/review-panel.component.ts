@@ -134,6 +134,7 @@ function parseTab(value: string | null): Tab | null {
     </div>
 
     <app-finding-detail-panel
+      [scanId]="scanId()"
       [finding]="selected()"
       [readonly]="isFrozen()"
       (closePanel)="selected.set(null)"

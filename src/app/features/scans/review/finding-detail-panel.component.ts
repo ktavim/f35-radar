@@ -1,17 +1,24 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { LucideAngularModule, X } from 'lucide-angular';
 import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { AuthMethodSelectComponent } from '@shared/components/auth-method-select.component';
 import { ButtonComponent } from '@shared/ui/button.component';
 import { redact } from '@lib/redact';
-import { firstSeenOn, originLabel } from '@lib/service';
+import {
+  firstSeenOn,
+  originLabel,
+  provenanceLabel,
+  requestHeaders,
+  responseHeaders
+} from '@lib/service';
 import { unresolvedReason } from '@lib/verdict';
-import type { AuthMethod, Service, ServiceUrl } from '@core/models';
+import type { AuthMethod, Service } from '@core/models';
 
 @Component({
   selector: 'app-finding-detail-panel',
   standalone: true,
-  imports: [LucideAngularModule, AuthPillComponent, AuthMethodSelectComponent, ButtonComponent],
+  imports: [RouterLink, LucideAngularModule, AuthPillComponent, AuthMethodSelectComponent, ButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (finding(); as f) {
@@ -72,7 +79,18 @@ import type { AuthMethod, Service, ServiceUrl } from '@core/models';
           }
           <div>
             <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">URL count</p>
-            <p class="text-sm tabular-nums">{{ f.request_count }}</p>
+            <div class="flex items-baseline gap-3">
+              <p class="text-sm tabular-nums">{{ f.request_count }}</p>
+              @if (f.request_count > 0) {
+                <!-- Preserves ?tab= so the page's back link returns to this tab. -->
+                <a
+                  class="text-xs text-accent hover:underline"
+                  [routerLink]="['/scans', scanId(), 'services', f.id]"
+                  queryParamsHandling="preserve">
+                  View all URLs →
+                </a>
+              }
+            </div>
           </div>
           @if (f.evidence; as ev) {
             <div>
@@ -142,7 +160,11 @@ export class FindingDetailPanelComponent {
   readonly originLabel = originLabel;
   readonly firstSeenOn = firstSeenOn;
   readonly unresolvedReason = unresolvedReason;
+  readonly provenanceLabel = provenanceLabel;
+  readonly requestHeaders = requestHeaders;
+  readonly responseHeaders = responseHeaders;
 
+  readonly scanId = input.required<string>();
   readonly finding = input<Service | null>(null);
   readonly readonly = input<boolean>(false);
   readonly closePanel = output<void>();
@@ -153,37 +175,5 @@ export class FindingDetailPanelComponent {
   // token is redacted again here so a misconfigured backend can't leak one.
   redacted(value: string): string {
     return redact(value);
-  }
-
-  /**
-   * Where the request came from, in the reviewer's terms rather than the
-   * scanner's name: the interceptor records requests the page's browser made,
-   * the tracer sends probes of its own. The difference matters because a probe
-   * never carries the page's credentials, so its status says less about the app.
-   */
-  provenanceLabel(ev: ServiceUrl): string {
-    return ev.scanner === 'interceptor' ? 'Captured from the browser' : 'Sent as a probe';
-  }
-
-  /**
-   * The request's auth header as far as the scanner recorded it. The scanner
-   * keeps the scheme word and drops the credential after it at capture, so the
-   * stars stand for a value that was sent but never stored. Null when the
-   * request carried no Authorization header, as the tracer's probes never do.
-   */
-  requestHeaders(ev: ServiceUrl): string | null {
-    return ev.sent_auth_scheme ? `Authorization: ${ev.sent_auth_scheme} *****` : null;
-  }
-
-  /**
-   * The response headers the scanner recorded: the challenge, and a redirect's
-   * target with its query, fragment and userinfo already stripped. Null when
-   * the response carried neither.
-   */
-  responseHeaders(ev: ServiceUrl): string | null {
-    const lines: string[] = [];
-    if (ev.auth_challenge) lines.push(`WWW-Authenticate: ${ev.auth_challenge}`);
-    if (ev.redirect_url) lines.push(`Location: ${ev.redirect_url}`);
-    return lines.length ? redact(lines.join('\n')) : null;
   }
 }

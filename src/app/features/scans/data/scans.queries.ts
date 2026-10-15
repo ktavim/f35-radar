@@ -13,6 +13,10 @@ export const scanKeys = {
   list: () => [...scanKeys.all, 'list'] as const,
   detail: (id: string) => [...scanKeys.all, 'detail', id] as const,
   findings: (id: string) => [...scanKeys.all, 'findings', id] as const,
+  // Not under findings(id): excluding or correcting a service invalidates
+  // that key, and a service's urls change with neither.
+  serviceUrls: (id: string, serviceId: string) =>
+    [...scanKeys.all, 'serviceUrls', id, serviceId] as const,
   appScans: (appId: string) => ['apps', appId, 'scans'] as const,
   appDiff: (appId: string, from: string, to: string) =>
     ['apps', appId, 'diff', from, to] as const
@@ -56,6 +60,16 @@ export function useFindingsQuery(id: () => string) {
     queryKey: scanKeys.findings(id()),
     queryFn: () => api.getFindings(id()),
     enabled: !!id()
+  }));
+}
+
+/** Every url behind a service, from both scanners. */
+export function useServiceUrlsQuery(id: () => string, serviceId: () => string) {
+  const api = inject(ScansApi);
+  return injectQuery(() => ({
+    queryKey: scanKeys.serviceUrls(id(), serviceId()),
+    queryFn: () => api.listServiceUrls(id(), serviceId()),
+    enabled: !!id() && !!serviceId()
   }));
 }
 

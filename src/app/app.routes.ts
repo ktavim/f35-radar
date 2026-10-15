@@ -31,6 +31,13 @@ export const appRoutes: Routes = [
           )
       },
       {
+        path: 'scans/:id/services/:serviceId',
+        loadComponent: () =>
+          import('./features/scans/service-urls/service-urls.component').then(
+            (m) => m.ServiceUrlsComponent
+          )
+      },
+      {
         path: 'scans/:id/submit',
         loadComponent: () =>
           import('./features/scans/submit/submit.component').then(
