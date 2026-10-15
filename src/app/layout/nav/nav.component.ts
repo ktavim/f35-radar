@@ -25,9 +25,9 @@ import { LucideAngularModule, LayoutDashboard, Plus, Settings } from 'lucide-ang
         <span>New Scan</span>
       </a>
       <a
-        href="#"
-        class="flex items-center gap-2 px-3 h-8 rounded-md text-sm text-fg-muted hover:text-fg hover:bg-surface-2"
-        aria-disabled="true">
+        routerLink="/settings"
+        routerLinkActive="bg-surface-2 text-fg"
+        class="flex items-center gap-2 px-3 h-8 rounded-md text-sm text-fg-muted hover:text-fg hover:bg-surface-2">
         <lucide-icon [name]="icons.Settings" [size]="14"></lucide-icon>
         <span>Settings</span>
       </a>

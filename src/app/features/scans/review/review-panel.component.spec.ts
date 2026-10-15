@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/angular';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { ReviewPanelComponent } from './review-panel.component';
+import { AuthService } from '@core/services/auth.service';
+import { ShortcutsService } from '@core/shortcuts/shortcuts.service';
 import type { AuthMethod, Service, Severity } from '@core/models';
 
 // The smallest service the panel accepts: found by the interceptor alone, with
@@ -61,7 +65,8 @@ function setup(findings: Service[], opts: SetupOpts = {}) {
     providers: [
       provideRouter([]),
       provideHttpClient(),
-      provideTanStackQuery(new QueryClient())
+      provideTanStackQuery(new QueryClient()),
+      { provide: AuthService, useValue: { currentUser: signal(null) } }
     ]
   });
 }
@@ -201,5 +206,29 @@ describe('ReviewPanelComponent — keyboard cursor', () => {
     fireEvent.click(screen.getByRole('tab', { name: /friendlies/i }));
     fireEvent.keyDown(window, { key: 'x' });
     expect(toggled).toEqual(['c1']);
+  });
+
+  it('ignores the shortcut key when Ctrl is held', async () => {
+    const { fixture } = await setup([blocker('b1', 'auth.contoso.com')]);
+    const panel = fixture.componentInstance;
+    const toggled: string[] = [];
+    panel.onToggle = (f) => void toggled.push(f.id);
+
+    fireEvent.keyDown(window, { key: 'x', ctrlKey: true });
+    expect(toggled).toEqual([]);
+  });
+
+  it('follows a binding changed in Settings', async () => {
+    localStorage.clear();
+    const { fixture } = await setup([blocker('b1', 'auth.contoso.com')]);
+    const panel = fixture.componentInstance;
+    const toggled: string[] = [];
+    panel.onToggle = (f) => void toggled.push(f.id);
+
+    TestBed.inject(ShortcutsService).setBinding('review.toggleExclusion', 'Alt+e');
+    fireEvent.keyDown(window, { key: 'x' });
+    fireEvent.keyDown(window, { key: 'e', altKey: true });
+    expect(toggled).toEqual(['b1']);
+    localStorage.clear();
   });
 });

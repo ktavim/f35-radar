@@ -52,6 +52,13 @@ export const appRoutes: Routes = [
           )
       },
       {
+        path: 'settings',
+        loadComponent: () =>
+          import('./features/settings/settings.component').then(
+            (m) => m.SettingsComponent
+          )
+      },
+      {
         path: 'apps/:appId/scans/new',
         loadComponent: () =>
           import('./features/scans/new-scan/new-scan.component').then(

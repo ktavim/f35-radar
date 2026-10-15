@@ -16,6 +16,8 @@ import { ButtonComponent } from '@shared/ui/button.component';
 import { SeverityDotComponent } from '@shared/components/severity-dot.component';
 import { useSetAuthMethodMutation, useToggleExclusionMutation } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
+import { ShortcutsService } from '@core/shortcuts/shortcuts.service';
+import { isTypingTarget } from '@core/shortcuts/shortcut-keys';
 import { isUnresolvedAuthMethod } from '@lib/verdict';
 import type { AuthMethod, Service, Severity } from '@core/models';
 
@@ -148,6 +150,7 @@ export class ReviewPanelComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly toast = inject(ToastService);
+  private readonly shortcuts = inject(ShortcutsService);
 
   readonly scanId = input.required<string>();
   readonly findings = input.required<Service[]>();
@@ -365,37 +368,45 @@ export class ReviewPanelComponent {
     return this.visibleFindings().find((f) => f.id === id);
   }
 
-  // j/k/x shortcuts for review screen.
+  private stepTab(step: number) {
+    const i = TABS.indexOf(this.activeTab());
+    this.selectTab(TABS[(i + step + TABS.length) % TABS.length]);
+  }
+
+  // Review screen shortcuts; the keys are the user's, from Settings.
   @HostListener('window:keydown', ['$event'])
   onKey(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (e.key === 'j') {
-      e.preventDefault();
-      this.moveCursor(1);
-    } else if (e.key === 'k') {
-      e.preventDefault();
-      this.moveCursor(-1);
-    } else if (e.key === ']' || e.key === '[') {
-      e.preventDefault();
-      const step = e.key === ']' ? 1 : -1;
-      const i = TABS.indexOf(this.activeTab());
-      this.selectTab(TABS[(i + step + TABS.length) % TABS.length]);
-    } else if (e.key === 'x') {
-      e.preventDefault();
-      if (this.isFrozen()) return;
-      const f = this.cursorFinding();
-      if (f) this.onToggle(f);
-    } else if (e.key === '?') {
-      e.preventDefault();
-      this.toast.info(
-        'Shortcuts',
-        'j/k: navigate · x: toggle exclusion · [/]: switch tab · /: search log · End: jump to latest'
-      );
-    } else if (e.key === 'Enter') {
-      const f = this.cursorFinding();
-      if (f) this.select(f);
-    } else if (e.key === 'Escape') {
-      this.selected.set(null);
+    if (e.key === 'Escape') {
+      if (!isTypingTarget(e.target)) this.selected.set(null);
+      return;
+    }
+    const action = this.shortcuts.match(e, 'review');
+    if (action == null) return;
+    e.preventDefault();
+    switch (action) {
+      case 'review.next':
+        this.moveCursor(1);
+        break;
+      case 'review.prev':
+        this.moveCursor(-1);
+        break;
+      case 'review.nextTab':
+        this.stepTab(1);
+        break;
+      case 'review.prevTab':
+        this.stepTab(-1);
+        break;
+      case 'review.toggleExclusion': {
+        if (this.isFrozen()) return;
+        const f = this.cursorFinding();
+        if (f) this.onToggle(f);
+        break;
+      }
+      case 'review.open': {
+        const f = this.cursorFinding();
+        if (f) this.select(f);
+        break;
+      }
     }
   }
 }

@@ -3,7 +3,9 @@ import {
   Component,
   ElementRef,
   HostListener,
+  Injector,
   ViewChild,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -14,6 +16,8 @@ import {
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { LucideAngularModule, Search } from 'lucide-angular';
 import { ToastService } from '@shared/ui/toast.service';
+import { ShortcutsService } from '@core/shortcuts/shortcuts.service';
+import { isTypingTarget } from '@core/shortcuts/shortcut-keys';
 import { redactObject } from '@lib/redact';
 import { formatEvent, type FormattedLine, type LineType } from './event-format';
 import type { ScanEvent } from '@core/models';
@@ -190,6 +194,8 @@ export class TerminalComponent {
   @ViewChild('searchInput') searchInputRef?: ElementRef<HTMLInputElement>;
 
   private readonly toast = inject(ToastService);
+  private readonly shortcuts = inject(ShortcutsService);
+  private readonly injector = inject(Injector);
 
   // Per-event memoization so the 8000-event fixture does not re-format each
   // existing event when a single new one arrives. Keeps the recompute O(n).
@@ -264,7 +270,10 @@ export class TerminalComponent {
   /** Public hook for TerminalDockComponent's title-bar Search button. */
   openSearch() {
     this.searchOpen.set(true);
-    queueMicrotask(() => this.searchInputRef?.nativeElement.focus());
+    // The input only exists once the @if has rendered; a microtask runs too early.
+    afterNextRender(() => this.searchInputRef?.nativeElement.focus(), {
+      injector: this.injector
+    });
   }
 
   /** Public hook for TerminalDockComponent's title-bar Filter button. */
@@ -329,23 +338,24 @@ export class TerminalComponent {
     if (len > 0) this.viewport.scrollToIndex(len - 1, 'auto');
   }
 
-  // Keyboard shortcuts on the terminal pane (when focused).
+  // Keyboard shortcuts on the terminal pane (when focused); the keys are the
+  // user's, from Settings.
   @HostListener('keydown', ['$event'])
   onKey(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (e.key === '/') {
-      e.preventDefault();
-      this.searchOpen.set(true);
-      queueMicrotask(() => this.searchInputRef?.nativeElement.focus());
-    } else if (e.key === 'End') {
-      e.preventDefault();
+    if (e.key === 'Escape') {
+      if (!isTypingTarget(e.target)) this.closeSearch();
+      return;
+    }
+    const action = this.shortcuts.match(e, 'terminal');
+    if (action == null) return;
+    e.preventDefault();
+    if (action === 'terminal.search') {
+      this.openSearch();
+    } else if (action === 'terminal.latest') {
       this.jumpToLatest();
-    } else if (e.key === 'Home') {
-      e.preventDefault();
+    } else if (action === 'terminal.top') {
       if (this.viewport) this.viewport.scrollToIndex(0, 'auto');
       this.autoScrollPaused.set(true);
-    } else if (e.key === 'Escape') {
-      this.closeSearch();
     }
   }
 }

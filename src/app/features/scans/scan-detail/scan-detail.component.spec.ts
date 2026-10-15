@@ -7,6 +7,7 @@ import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-exper
 import { BehaviorSubject, Subject } from 'rxjs';
 import { ScanDetailComponent } from './scan-detail.component';
 import { ScansApi } from '../data/scans.api';
+import { AuthService } from '@core/services/auth.service';
 import { SseService, type ConnectionState, type SseStream } from '@lib/sse.service';
 import type { ScanDetail, ScanEvent } from '@core/models';
 
@@ -85,7 +86,8 @@ async function setup(scan: ScanDetail) {
       provideHttpClient(),
       provideTanStackQuery(new QueryClient()),
       { provide: ScansApi, useValue: apiStub },
-      { provide: SseService, useValue: fakeSse }
+      { provide: SseService, useValue: fakeSse },
+      { provide: AuthService, useValue: { currentUser: signal(null) } }
     ]
   });
   return { view, cmp: view.fixture.componentInstance, fakeSse };
