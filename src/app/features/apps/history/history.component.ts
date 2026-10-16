@@ -85,9 +85,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
       <p class="text-sm text-danger">Failed to load scans.</p>
     } @else if (filtered().length === 0) {
       <app-empty-state
-        message="No scans match this filter yet."
-        cta="Run a scan for this app"
-        (ctaClick)="goNew()">
+        [message]="filter() === 'all' ? 'No scans yet.' : 'No scans with this status.'">
       </app-empty-state>
     } @else {
       <div class="border border-border rounded-md bg-surface overflow-hidden">
@@ -331,9 +329,5 @@ export class HistoryComponent {
 
   openScan(id: string) {
     this.router.navigate(['/scans', id]);
-  }
-
-  goNew() {
-    this.router.navigate(['/apps', this.appId(), 'scans', 'new']);
   }
 }
