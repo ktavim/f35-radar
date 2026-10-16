@@ -137,7 +137,7 @@ function exportRow(f: Service) {
                 <li class="px-4 py-2">
                   <div class="flex items-center justify-between gap-3">
                     <span class="font-mono text-xs text-fg-muted line-through truncate">{{ originLabel(f) }}</span>
-                    <app-auth-pill [method]="f.auth_method"></app-auth-pill>
+                    <app-auth-pill [method]="f.auth_method" [muted]="true"></app-auth-pill>
                   </div>
                 </li>
               }

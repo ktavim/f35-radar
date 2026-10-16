@@ -64,7 +64,7 @@ import type { Service, ServiceUrl, Severity } from '@core/models';
                     {{ originLabel(f) }}
                   </td>
                   <td class="px-4 h-10" [class.opacity-60]="f.excluded">
-                    <app-auth-pill [method]="f.auth_method"></app-auth-pill>
+                    <app-auth-pill [method]="f.auth_method" [muted]="f.excluded"></app-auth-pill>
                   </td>
                   <td class="px-4 h-10 text-xs text-fg-muted font-mono truncate max-w-[260px]"
                       [class.opacity-60]="f.excluded"

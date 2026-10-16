@@ -16,10 +16,13 @@ import type { AuthMethod } from '@core/models';
 })
 export class AuthPillComponent {
   readonly method = input.required<AuthMethod>();
+  // Greys the dot for an excluded service, so a dropped row doesn't still
+  // signal severity; the label keeps naming the method.
+  readonly muted = input<boolean>(false);
 
   label = computed(() => authMethodLabel(this.method()));
 
   // Mirrors the backend's severity for the method, so the pill and the group
   // a service lands in never disagree.
-  color = computed(() => authMethodColor(this.method()));
+  color = computed(() => (this.muted() ? 'var(--color-fg-muted)' : authMethodColor(this.method())));
 }
