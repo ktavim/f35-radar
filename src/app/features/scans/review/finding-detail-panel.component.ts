@@ -58,6 +58,18 @@ import type { AuthMethod, Service } from '@core/models';
               }
             }
           </div>
+          @if (f.ips?.length) {
+            <!-- Nothing shown when the host didn't resolve: the dns_failed
+                 reason above already says so. -->
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">IPs</p>
+              <ul class="space-y-1">
+                @for (ip of f.ips; track ip) {
+                  <li class="text-xs font-mono text-fg break-all">{{ ip }}</li>
+                }
+              </ul>
+            </div>
+          }
           @if (firstSeenOn(f); as page) {
             <div>
               <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">First seen on page</p>
