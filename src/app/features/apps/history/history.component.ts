@@ -11,7 +11,7 @@ import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { injectQueryClient } from '@tanstack/angular-query-experimental';
 import { PageHeaderComponent } from '@shared/components/page-header.component';
-import { StatusPillComponent } from '@shared/components/status-pill.component';
+import { ScanStatusComponent } from '@shared/components/scan-status.component';
 import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { EmptyStateComponent } from '@shared/components/empty-state.component';
 import { SkeletonComponent } from '@shared/components/skeleton.component';
@@ -43,7 +43,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
     DatePipe,
     RouterLink,
     PageHeaderComponent,
-    StatusPillComponent,
+    ScanStatusComponent,
     AuthPillComponent,
     EmptyStateComponent,
     SkeletonComponent,
@@ -70,7 +70,11 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
           [class.text-fg-muted]="filter() !== s.key"
           [class.border-border]="filter() !== s.key"
           (click)="filter.set(s.key)">
-          {{ s.label }}
+          @if (s.key === 'all') {
+            {{ s.label }}
+          } @else {
+            <app-scan-status [status]="s.key" [size]="14"></app-scan-status>
+          }
         </button>
       }
     </div>
@@ -123,7 +127,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
                   </div>
                 </td>
                 <td class="px-4 h-10">
-                  <app-status-pill [kind]="s.status" [label]="s.status"></app-status-pill>
+                  <app-scan-status [status]="s.status"></app-scan-status>
                 </td>
                 <td class="px-4 h-10 text-right tabular-nums text-fg"
                     [class.text-fg-muted]="s.blocker_count === 0">

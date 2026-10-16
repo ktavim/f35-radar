@@ -15,7 +15,7 @@ import { LucideAngularModule, Check } from 'lucide-angular';
 import { TerminalDockComponent } from '../live-feed/terminal-dock.component';
 import { ReviewPanelComponent } from '../review/review-panel.component';
 import { CounterCardComponent } from '@shared/components/counter-card.component';
-import { StatusPillComponent } from '@shared/components/status-pill.component';
+import { ScanStatusComponent } from '@shared/components/scan-status.component';
 import { ButtonComponent } from '@shared/ui/button.component';
 import { DurationPipe } from '@shared/pipes/duration.pipe';
 import { SkeletonComponent } from '@shared/components/skeleton.component';
@@ -47,7 +47,7 @@ const TERMINAL_STREAM_GRACE_MS = 4000;
     TerminalDockComponent,
     ReviewPanelComponent,
     CounterCardComponent,
-    StatusPillComponent,
+    ScanStatusComponent,
     ButtonComponent,
     DurationPipe,
     SkeletonComponent
@@ -70,7 +70,7 @@ const TERMINAL_STREAM_GRACE_MS = 4000;
             <a class="text-sm font-mono text-fg-muted truncate" [href]="scan()!.url" target="_blank" rel="noopener">
               {{ scan()!.url }}
             </a>
-            <app-status-pill [kind]="scan()!.status" [label]="scan()!.status"></app-status-pill>
+            <app-scan-status [status]="scan()!.status"></app-scan-status>
             @if (isRunning()) {
               <span class="text-xs text-fg-muted tabular-nums">
                 elapsed {{ elapsedMs() | duration }}
