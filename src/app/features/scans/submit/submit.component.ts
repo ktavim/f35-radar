@@ -31,6 +31,7 @@ function exportRow(f: Service) {
     scheme: f.scheme,
     host: f.host,
     port: f.port,
+    ips: f.ips ?? [],
     auth_method: f.auth_method,
     severity: f.severity
   };
