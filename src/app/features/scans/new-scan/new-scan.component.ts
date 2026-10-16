@@ -20,6 +20,11 @@ import { ButtonComponent } from '@shared/ui/button.component';
 import { useAppsListQuery, useCreateScanMutation } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
 
+// Deepest crawl the form allows. Kept low for now since crawl cost grows
+// roughly exponentially with depth; raise it here to offer deeper scans.
+const MAX_SCAN_DEPTH = 3;
+const DEFAULT_SCAN_DEPTH = 2;
+
 interface NewScanForm {
   max_depth: FormControl<number>;
 }
@@ -68,15 +73,26 @@ interface NewScanForm {
           </div>
         }
 
-        <div class="space-y-1 max-w-[200px]">
-          <label for="max_depth" class="block text-xs font-medium text-fg-muted">Max depth</label>
-          <input
-            id="max_depth"
-            type="number"
-            min="1"
-            max="10"
-            formControlName="max_depth"
-            class="w-full h-9 px-3 text-sm rounded-md bg-surface border border-border focus:border-border-strong outline-none tabular-nums" />
+        <div class="space-y-1">
+          <span id="max_depth_label" class="block text-xs font-medium text-fg-muted">Max depth</span>
+          <div role="radiogroup" aria-labelledby="max_depth_label" class="flex items-center gap-1">
+            @for (d of depthOptions; track d) {
+              <button
+                type="button"
+                role="radio"
+                [attr.aria-checked]="form.controls.max_depth.value === d"
+                class="w-9 h-9 rounded-md text-sm border tabular-nums transition-colors"
+                [class.bg-surface-2]="form.controls.max_depth.value === d"
+                [class.text-fg]="form.controls.max_depth.value === d"
+                [class.border-border-strong]="form.controls.max_depth.value === d"
+                [class.bg-surface]="form.controls.max_depth.value !== d"
+                [class.text-fg-muted]="form.controls.max_depth.value !== d"
+                [class.border-border]="form.controls.max_depth.value !== d"
+                (click)="form.controls.max_depth.setValue(d)">
+                {{ d }}
+              </button>
+            }
+          </div>
         </div>
 
         <div class="flex items-center gap-2 pt-4">
@@ -116,8 +132,10 @@ export class NewScanComponent {
     return this.apps().find((a) => a.id === id)?.url ?? '';
   });
 
+  readonly depthOptions = Array.from({ length: MAX_SCAN_DEPTH }, (_, i) => i + 1);
+
   readonly form: FormGroup<NewScanForm> = this.fb.group<NewScanForm>({
-    max_depth: this.fb.control(3, [Validators.min(1), Validators.max(10)])
+    max_depth: this.fb.control(DEFAULT_SCAN_DEPTH, [Validators.min(1), Validators.max(MAX_SCAN_DEPTH)])
   });
 
   readonly appError = signal<string>('');
