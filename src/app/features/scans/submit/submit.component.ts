@@ -22,6 +22,7 @@ import {
 } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
 import { originLabel } from '@lib/service';
+import { redact } from '@lib/redact';
 import type { AppSummary, Service } from '@core/models';
 
 /** A service as the downloaded submission JSON records it. */
@@ -32,6 +33,7 @@ function exportRow(f: Service) {
     host: f.host,
     port: f.port,
     ips: f.ips ?? [],
+    sources: f.sources.map((s) => ({ kind: s.kind, value: redact(s.value) })),
     auth_method: f.auth_method,
     severity: f.severity
   };
