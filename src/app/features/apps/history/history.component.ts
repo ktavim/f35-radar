@@ -62,7 +62,7 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
       @for (s of statuses; track s.key) {
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-sm text-xs border transition-colors"
+          class="px-2.5 h-7 rounded-sm text-xs border transition-colors"
           [class.bg-surface-2]="filter() === s.key"
           [class.text-fg]="filter() === s.key"
           [class.border-border-strong]="filter() === s.key"
@@ -70,9 +70,6 @@ const STATUSES: { key: ScanStatus | 'all'; label: string }[] = [
           [class.text-fg-muted]="filter() !== s.key"
           [class.border-border]="filter() !== s.key"
           (click)="filter.set(s.key)">
-          @if (s.key !== 'all') {
-            <app-scan-status [status]="s.key" [showText]="false" [size]="18"></app-scan-status>
-          }
           {{ s.label }}
         </button>
       }

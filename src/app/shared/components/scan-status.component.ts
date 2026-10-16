@@ -42,16 +42,15 @@ const STATUSES: Record<ScanStatus, { label: string; variant: Variant; path: stri
 /**
  * Scan status rendered as a GitLab CI status badge, using GitLab's dark-mode
  * ci-icon colors (gitlab-org/gitlab app/assets/stylesheets/root.scss, `.gl-dark`)
- * resolved against the @gitlab/ui dark palette. With `showText` it is the
- * pill-shaped badge GitLab shows in pipeline lists; without, just the icon.
+ * resolved against the @gitlab/ui dark palette, as the pill-shaped badge
+ * GitLab shows in pipeline lists.
  */
 @Component({
   selector: 'app-scan-status',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '[class]': "'v-' + variant()",
-    '[attr.aria-hidden]': 'showText() ? null : "true"'
+    '[class]': "'v-' + variant()"
   },
   styles: [`
     :host {
@@ -86,25 +85,15 @@ const STATUSES: Record<ScanStatus, { label: string; variant: Variant; path: stri
   `],
   template: `
     <span class="wrap">
-      <svg
-        viewBox="0 0 22 22"
-        [attr.width]="size() - 4"
-        [attr.height]="size() - 4"
-        fill="currentColor"
-        aria-hidden="true">
+      <svg viewBox="0 0 22 22" width="20" height="20" fill="currentColor" aria-hidden="true">
         <path [attr.d]="path()" />
       </svg>
     </span>
-    @if (showText()) {
-      <span class="text">{{ label() }}</span>
-    }
+    <span class="text">{{ label() }}</span>
   `
 })
 export class ScanStatusComponent {
   readonly status = input.required<ScanStatus>();
-  readonly showText = input(true);
-  /** Outer diameter of the icon in px; GitLab's default is 24. */
-  readonly size = input(24);
 
   readonly label = computed(() => STATUSES[this.status()].label);
   readonly variant = computed(() => STATUSES[this.status()].variant);
