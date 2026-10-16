@@ -99,9 +99,7 @@ interface NewAppForm {
       <p class="text-sm text-danger">Failed to load apps.</p>
     } @else if (filtered().length === 0) {
       <app-empty-state
-        message="No apps match this filter yet."
-        cta="Run your first scan"
-        (ctaClick)="goNew()">
+        [message]="filter() === 'all' ? 'No apps yet.' : 'No apps in this state.'">
       </app-empty-state>
     } @else {
       <div class="border border-border rounded-md bg-surface overflow-hidden">
@@ -279,10 +277,6 @@ export class DashboardComponent {
 
   open(appId: string) {
     this.router.navigate(['/apps', appId]);
-  }
-
-  goNew() {
-    this.router.navigate(['/scans/new']);
   }
 
   openCreate() {
