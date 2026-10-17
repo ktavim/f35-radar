@@ -230,7 +230,7 @@ function makeJobs(scan: ScanDetail, error?: string): ScanJob[] {
 
 /** Fills in what the server derives: the app's name, the counts and the jobs. */
 function buildScan(
-  fields: Omit<ScanDetail, 'name' | 'blocker_count' | 'service_count' | 'jobs'>,
+  fields: Omit<ScanDetail, 'name' | 'blocker_count' | 'review_count' | 'service_count' | 'jobs'>,
   services: Service[],
   error?: string
 ): ScanDetail {
@@ -238,6 +238,7 @@ function buildScan(
     ...fields,
     name: APP_NAMES[fields.app_id] ?? fields.app_id,
     blocker_count: services.filter((s) => s.severity === 'blocker').length,
+    review_count: services.filter((s) => s.severity === 'review').length,
     service_count: services.length,
     jobs: []
   };
@@ -581,6 +582,7 @@ function summary(s: ScanDetail): ScanSummary {
     completed_at: s.completed_at,
     started_by: s.started_by,
     blocker_count: s.blocker_count,
+    review_count: s.review_count,
     service_count: s.service_count
   };
 }

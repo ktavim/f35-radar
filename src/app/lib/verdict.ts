@@ -92,6 +92,15 @@ export function correctedFrom(s: Pick<Service, 'auth_method' | 'scanners_auth_me
   return verdict != null && verdict !== s.auth_method ? verdict : null;
 }
 
+/**
+ * Whether the service keeps its scan from being submitted: a bandit, or a
+ * bogey no one has filled in, unless it is excluded. Mirrors the backend's
+ * `UNRESOLVED_SEVERITIES` (core/db.py), which its submit route refuses on.
+ */
+export function blocksSubmit(s: Pick<Service, 'severity' | 'excluded'>): boolean {
+  return !s.excluded && (s.severity === 'blocker' || s.severity === 'review');
+}
+
 export function severityColor(severity: Severity): string {
   switch (severity) {
     case 'blocker':

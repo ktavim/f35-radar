@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from 'msw';
 import { ALL_FIXTURES, APP_NAMES, fixtureSummaries, makeEvent, originPayload, pagePathOf } from '../fixtures';
-import { manualAuthTargets, severityForAuthMethod } from '@lib/verdict';
+import { blocksSubmit, manualAuthTargets, severityForAuthMethod } from '@lib/verdict';
 import type {
   AppSummary,
   AuthMethod,
@@ -170,6 +170,18 @@ export const handlers = [
     if (isScanSubmitted(id)) {
       return json({ message: 'this scan has already been submitted' }, { status: 409 });
     }
+    // Counted from the services, not the summary, so exclusions and filled-in
+    // methods made in this session count, as they do on the server.
+    const unresolved = (memo.services.get(id) ?? []).filter(blocksSubmit);
+    const blockers = unresolved.filter((s) => s.severity === 'blocker').length;
+    const reviews = unresolved.length - blockers;
+    if (unresolved.length > 0) {
+      const parts = [
+        ...(blockers ? [`${blockers} unresolved blocker(s)`] : []),
+        ...(reviews ? [`${reviews} service(s) to review`] : [])
+      ];
+      return json({ message: `${parts.join(' and ')} remain` }, { status: 409 });
+    }
 
     memo.currentScanByApp.set(detail.app_id, {
       scanId: id,
@@ -267,6 +279,7 @@ export const handlers = [
         app_id: appId,
         started_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
         blocker_count: i === 0 ? 0 : i,
+        review_count: 0,
         service_count: 12 - i
       }));
       await delay(80);
@@ -383,7 +396,8 @@ function deriveExposureState(s: ScanSummary): ExposureState {
     case 'cancelled':
       return 'failed';
     case 'completed':
-      return s.blocker_count > 0 ? 'blocked' : 'ready_for_submission';
+      // As on the server: a review refuses submit just as a blocker does.
+      return s.blocker_count + s.review_count > 0 ? 'blocked' : 'ready_for_submission';
   }
 }
 

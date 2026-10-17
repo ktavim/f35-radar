@@ -20,6 +20,7 @@ describe('scan fixtures', () => {
     for (const { scan, services } of fixtures) {
       expect(scan.service_count).toBe(services.length);
       expect(scan.blocker_count).toBe(services.filter((s) => s.severity === 'blocker').length);
+      expect(scan.review_count).toBe(services.filter((s) => s.severity === 'review').length);
       expect(scan.name).not.toBe('');
       expect(scan.jobs.map((j) => j.scanner).sort()).toEqual(['interceptor', 'tracer']);
     }

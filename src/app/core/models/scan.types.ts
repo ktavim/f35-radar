@@ -128,7 +128,9 @@ export interface ScanSummary {
   started_at: string;
   completed_at?: string | null;
   started_by: string;
+  /** Services not excluded, by severity. Either one above 0 refuses submit. */
   blocker_count: number;
+  review_count: number;
   service_count: number;
   submitted_at?: string | null;
   submitted_by?: string | null;

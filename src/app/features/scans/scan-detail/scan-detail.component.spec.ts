@@ -55,6 +55,7 @@ function makeScan(status: ScanDetail['status'], id = `scn_${status}`): ScanDetai
     completed_at: terminal ? new Date('2026-06-29T12:02:00Z').toISOString() : undefined,
     started_by: 'tester',
     blocker_count: 0,
+    review_count: 0,
     service_count: 0,
     duration_ms: 96_000,
     pages_crawled: 4,

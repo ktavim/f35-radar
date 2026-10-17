@@ -18,7 +18,7 @@ import { useSetAuthMethodMutation, useToggleExclusionMutation } from '../data/sc
 import { ToastService } from '@shared/ui/toast.service';
 import { ShortcutsService } from '@core/shortcuts/shortcuts.service';
 import { isTypingTarget } from '@core/shortcuts/shortcut-keys';
-import { authMethodLabel, canSetAuthMethod } from '@lib/verdict';
+import { authMethodLabel, blocksSubmit, canSetAuthMethod } from '@lib/verdict';
 import type { AuthMethod, Service, Severity } from '@core/models';
 
 type Tab = 'all' | Severity;
@@ -56,6 +56,7 @@ function parseTab(value: string | null): Tab | null {
       <app-verdict-banner
         class="block mb-8"
         [blockerCount]="unexcludedBlockers().length"
+        [reviewCount]="unexcludedReviews().length"
         [exposeCount]="exposeCount()">
       </app-verdict-banner>
 
@@ -237,10 +238,17 @@ export class ReviewPanelComponent {
     return list.some((f) => f.id === id) ? id : (list[0]?.id ?? null);
   });
 
-  readonly blockers = computed(() => this.findings().filter((f) => f.severity === 'blocker'));
+  // What submit refuses on (see `blocksSubmit`), split by severity because each
+  // is resolved differently: a bandit is excluded or remediated, a bogey gets
+  // its auth method set or is excluded.
+  private readonly unresolved = computed(() => this.findings().filter(blocksSubmit));
 
   readonly unexcludedBlockers = computed(() =>
-    this.blockers().filter((f) => !f.excluded)
+    this.unresolved().filter((f) => f.severity === 'blocker')
+  );
+
+  readonly unexcludedReviews = computed(() =>
+    this.unresolved().filter((f) => f.severity === 'review')
   );
 
   readonly exposeCount = computed(() =>
@@ -249,7 +257,7 @@ export class ReviewPanelComponent {
 
   readonly submitDisabled = computed(
     () =>
-      this.unexcludedBlockers().length > 0 ||
+      this.unresolved().length > 0 ||
       !this.isLatestScan() ||
       this.isFrozen() ||
       !this.isCompleted()
@@ -269,10 +277,18 @@ export class ReviewPanelComponent {
     if (this.isFrozen()) {
       return 'This scan is locked.';
     }
-    const n = this.unexcludedBlockers().length;
-    return n > 0
-      ? `${n} ${n === 1 ? 'bandit must be excluded' : 'bandits must be excluded'} or remediated before submitting.`
-      : '';
+    const b = this.unexcludedBlockers().length;
+    const r = this.unexcludedReviews().length;
+    if (b > 0 && r > 0) {
+      return `${b} ${b === 1 ? 'bandit' : 'bandits'} and ${r} ${r === 1 ? 'bogey' : 'bogeys'} must be resolved before submitting.`;
+    }
+    if (b > 0) {
+      return `${b} ${b === 1 ? 'bandit must be excluded' : 'bandits must be excluded'} or remediated before submitting.`;
+    }
+    if (r > 0) {
+      return `Set the auth method of ${r} ${r === 1 ? 'bogey, or exclude it,' : 'bogeys, or exclude them,'} before submitting.`;
+    }
+    return '';
   });
 
   private readonly toggleMutation = useToggleExclusionMutation({

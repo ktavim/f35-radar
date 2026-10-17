@@ -6,6 +6,7 @@ import {
   input,
   signal
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
 import { LucideAngularModule, Check, Copy, Download } from 'lucide-angular';
 import { injectQueryClient } from '@tanstack/angular-query-experimental';
@@ -22,9 +23,15 @@ import {
 } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
 import { originLabel } from '@lib/service';
-import { correctedFrom } from '@lib/verdict';
+import { blocksSubmit, correctedFrom } from '@lib/verdict';
 import { redact } from '@lib/redact';
 import type { AppSummary, Service } from '@core/models';
+
+/** The server's reason for refusing; FastAPI nests it under `detail`. */
+function refusalMessage(err: unknown): string | undefined {
+  if (!(err instanceof HttpErrorResponse)) return undefined;
+  return err.error?.detail?.message ?? err.error?.message;
+}
 
 /** A service as the downloaded submission JSON records it. */
 function exportRow(f: Service) {
@@ -160,11 +167,15 @@ function exportRow(f: Service) {
           <span class="text-xs text-fg-muted">
             Only the latest scan can be submitted.
           </span>
+        } @else if (hasUnresolved()) {
+          <span class="text-xs text-fg-muted">
+            Bandits and bogeys must be resolved in review first.
+          </span>
         }
         <app-button
           variant="primary"
           size="lg"
-          [disabled]="submitMutation.isPending() || !isCompleted() || isSubmitted() || !isLatestScan() || hasUnexcludedBlockers()"
+          [disabled]="submitMutation.isPending() || !isCompleted() || isSubmitted() || !isLatestScan() || hasUnresolved()"
           (click)="confirm()">
           {{ submitMutation.isPending() ? 'Saving…' : 'Confirm and save' }}
         </app-button>
@@ -212,9 +223,7 @@ export class SubmitComponent {
 
   readonly exposed = computed(() => this.findings().filter((f) => !f.excluded));
   readonly excluded = computed(() => this.findings().filter((f) => f.excluded));
-  readonly hasUnexcludedBlockers = computed(() =>
-    this.findings().some((f) => f.severity === 'blocker' && !f.excluded)
-  );
+  readonly hasUnresolved = computed(() => this.findings().some(blocksSubmit));
 
   readonly shareLink = computed(() => {
     const a = this.submissionId();
@@ -235,8 +244,8 @@ export class SubmitComponent {
       this.toast.error('Cannot submit', 'Only the latest scan can be submitted.');
       return;
     }
-    if (this.hasUnexcludedBlockers()) {
-      this.toast.error('Cannot submit', 'Bandits must be excluded first.');
+    if (this.hasUnresolved()) {
+      this.toast.error('Cannot submit', 'Bandits and bogeys must be resolved in review first.');
       return;
     }
     this.submitMutation.mutate(this.id(), {
@@ -244,7 +253,9 @@ export class SubmitComponent {
         this.submissionId.set(submission_id);
         this.toast.success('Scan submitted');
       },
-      onError: () => this.toast.error('Submit failed')
+      // The server is authoritative: if it refuses what the checks above let
+      // through (another tab changed the scan, say), show its reason.
+      onError: (err) => this.toast.error('Submit failed', refusalMessage(err))
     });
   }
 

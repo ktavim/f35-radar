@@ -101,6 +101,36 @@ describe('ReviewPanelComponent — blockers present', () => {
   });
 });
 
+// The server refuses submit while a review is not excluded, as it does a blocker.
+describe('ReviewPanelComponent — reviews present', () => {
+  it('disables Submit while any review is unexcluded', async () => {
+    await setup([negotiate('n1', 'sso.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
+    expect(screen.getByRole('button', { name: /submit scan/i })).toBeDisabled();
+    expect(
+      screen.getByText(/set the auth method of 1 bogey, or exclude it, before submitting/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No blocking issues')).toBeNull();
+  });
+
+  it('enables Submit once the review is excluded', async () => {
+    await setup([svc('r1', 'a.contoso.com', 'unknown', 'review', true), cleared('c1', 'cdn.contoso.com')]);
+    expect(screen.getByRole('button', { name: /submit scan/i })).not.toBeDisabled();
+  });
+
+  it('enables Submit once the review is filled in', async () => {
+    // A negotiate a person named as Kerberos: cleared, the scanners' verdict kept.
+    await setup([{ ...svc('n1', 'sso.contoso.com', 'kerberos', 'cleared'), scanners_auth_method: 'negotiate' }]);
+    expect(screen.getByRole('button', { name: /submit scan/i })).not.toBeDisabled();
+  });
+
+  it('names both counts when blockers and reviews remain', async () => {
+    await setup([blocker('b1', 'auth.contoso.com'), review('r1', 'a.contoso.com'), review('r2', 'b.contoso.com')]);
+    expect(
+      screen.getByText(/1 bandit and 2 bogeys must be resolved before submitting/i)
+    ).toBeInTheDocument();
+  });
+});
+
 describe('ReviewPanelComponent — published services', () => {
   it('lists a published service in its own group and does not count it as a blocker', async () => {
     await setup([published('p1', 'legacy.contoso.com'), cleared('c1', 'cdn.contoso.com')]);
