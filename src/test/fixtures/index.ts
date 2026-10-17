@@ -154,6 +154,7 @@ function makeService(host: string, auth: AuthMethod, idx: number, opts: ServiceO
     host,
     port: 443,
     auth_method: auth,
+    scanners_auth_method: auth,
     severity: published ? 'published' : severityForAuthMethod(auth),
     request_count: Math.floor(Math.random() * 80) + 1,
     ips: auth === 'dns_failed' ? null : [`10.${idx % 200}.${(idx * 7) % 250}.${((idx * 13) % 250) + 1}`],
@@ -175,6 +176,15 @@ function makeService(host: string, auth: AuthMethod, idx: number, opts: ServiceO
           removed_by: null
         }
       : null
+  };
+}
+
+/** The service with its method set by hand, as the manual override leaves it. */
+function corrected(s: Service, method: AuthMethod): Service {
+  return {
+    ...s,
+    auth_method: method,
+    severity: s.severity === 'published' ? 'published' : severityForAuthMethod(method)
   };
 }
 
@@ -270,6 +280,10 @@ export const blockedScan: ScanFixture = (() => {
   const reviews = HOSTS.slice(2, 7).map((h, i) =>
     makeService(h, REVIEW_ROTATION[i % REVIEW_ROTATION.length]!, i + 3, { pageBase: url })
   );
+  // Already corrected by hand, so the manual marker and Undo have demo data:
+  // the scanners' unknown filled in, and a negotiate named as Kerberos.
+  reviews[1] = corrected(reviews[1]!, 'oauth');
+  reviews[4] = corrected(reviews[4]!, 'kerberos');
   const cleared = HOSTS.slice(7, 15).map((h, i) =>
     makeService(h, CLEARED_ROTATION[i % CLEARED_ROTATION.length]!, i + 8, {
       pageBase: url,

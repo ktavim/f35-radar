@@ -18,7 +18,7 @@ import { useSetAuthMethodMutation, useToggleExclusionMutation } from '../data/sc
 import { ToastService } from '@shared/ui/toast.service';
 import { ShortcutsService } from '@core/shortcuts/shortcuts.service';
 import { isTypingTarget } from '@core/shortcuts/shortcut-keys';
-import { isUnresolvedAuthMethod } from '@lib/verdict';
+import { authMethodLabel, canSetAuthMethod } from '@lib/verdict';
 import type { AuthMethod, Service, Severity } from '@core/models';
 
 type Tab = 'all' | Severity;
@@ -139,7 +139,7 @@ function parseTab(value: string | null): Tab | null {
       [scanId]="scanId()"
       [finding]="selected()"
       [readonly]="isFrozen()"
-      (closePanel)="selected.set(null)"
+      (closePanel)="selectedId.set(null)"
       (toggleExclude)="onToggle($event)"
       (setAuthMethod)="onSetAuthMethod($event)">
     </app-finding-detail-panel>
@@ -160,7 +160,13 @@ export class ReviewPanelComponent {
   // true so existing call sites that don't supply this don't regress.
   readonly isCompleted = input<boolean>(true);
 
-  readonly selected = signal<Service | null>(null);
+  // The open detail panel's service, read from the findings rather than kept
+  // as a copy, so it follows optimistic updates and their rollbacks.
+  readonly selectedId = signal<string | null>(null);
+  readonly selected = computed(() => {
+    const id = this.selectedId();
+    return this.findings().find((f) => f.id === id) ?? null;
+  });
 
   // The tab the user picked, kept in the URL (?tab=) so a reload or a shared
   // link lands on the same tab. Null until they pick one.
@@ -283,15 +289,18 @@ export class ReviewPanelComponent {
       this.toast.error('Reverted', 'Could not update auth method — change rolled back.');
     },
     onSuccess: (args) => {
-      this.toast.success(
-        'Auth method updated',
-        `Finding set to ${args.authMethod.toUpperCase()}.`
-      );
+      const label = authMethodLabel(args.authMethod);
+      const service = this.findings().find((f) => f.id === args.findingId);
+      if (service?.scanners_auth_method === args.authMethod) {
+        this.toast.success('Correction undone', `Back to the scanners' verdict, ${label}.`);
+      } else {
+        this.toast.success('Auth method updated', `Finding set to ${label}.`);
+      }
     }
   });
 
   select(f: Service) {
-    this.selected.set(f);
+    this.selectedId.set(f.id);
   }
 
   selectTab(tab: Tab) {
@@ -325,19 +334,15 @@ export class ReviewPanelComponent {
 
   onSetAuthMethod(e: { finding: Service; method: AuthMethod }) {
     // Guard mirrors the backend: only the latest, unsubmitted scan is editable,
-    // and only a method the scanners could not tell (unknown, no_response,
-    // dns_failed) can be set manually.
-    if (this.isFrozen() || !isUnresolvedAuthMethod(e.finding.auth_method)) return;
+    // and only where the scanners could not tell the method (unknown,
+    // no_response, dns_failed) or its mechanism (negotiate). Keyed by their
+    // verdict, so a correction can be changed or undone.
+    if (this.isFrozen() || !canSetAuthMethod(e.finding, e.method)) return;
     this.authMethodMutation.mutate({
       scanId: this.scanId(),
       findingId: e.finding.id,
       authMethod: e.method
     });
-    // Keep the open detail panel in sync — `selected` is a separate signal from
-    // the findings cache, so it won't pick up the optimistic update on its own.
-    if (this.selected()?.id === e.finding.id) {
-      this.selected.set({ ...e.finding, auth_method: e.method });
-    }
   }
 
   onToggle(f: Service) {
@@ -377,7 +382,7 @@ export class ReviewPanelComponent {
   @HostListener('window:keydown', ['$event'])
   onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (!isTypingTarget(e.target)) this.selected.set(null);
+      if (!isTypingTarget(e.target)) this.selectedId.set(null);
       return;
     }
     const action = this.shortcuts.match(e, 'review');

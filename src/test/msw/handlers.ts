@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from 'msw';
 import { ALL_FIXTURES, APP_NAMES, fixtureSummaries, makeEvent, originPayload, pagePathOf } from '../fixtures';
-import { severityForAuthMethod } from '@lib/verdict';
+import { manualAuthTargets, severityForAuthMethod } from '@lib/verdict';
 import type {
   AppSummary,
   AuthMethod,
@@ -114,6 +114,22 @@ export const handlers = [
     const next: Service = { ...services[idx]! };
     if (typeof body.excluded === 'boolean') next.excluded = body.excluded;
     if (body.auth_method) {
+      // As on the server: keyed by the scanners' verdict, not the current
+      // label, and setting the verdict itself undoes a correction.
+      const verdict = next.scanners_auth_method;
+      const targets = manualAuthTargets(verdict);
+      if (!targets) {
+        return json(
+          { message: 'auth method can only be set manually when the scanners found it unknown, no_response, dns_failed or negotiate' },
+          { status: 409 }
+        );
+      }
+      if (body.auth_method !== verdict && !targets.includes(body.auth_method)) {
+        return json(
+          { message: `cannot set auth method to ${body.auth_method} when the scanners found ${verdict}` },
+          { status: 422 }
+        );
+      }
       next.auth_method = body.auth_method;
       // The registry's verdict outranks the method: a published service stays published.
       if (next.severity !== 'published') next.severity = severityForAuthMethod(body.auth_method);

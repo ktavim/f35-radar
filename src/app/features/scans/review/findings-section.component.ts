@@ -11,6 +11,7 @@ import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { SeverityDotComponent } from '@shared/components/severity-dot.component';
 import { redact } from '@lib/redact';
 import { originLabel, requestPath } from '@lib/service';
+import { correctedFrom } from '@lib/verdict';
 import type { Service, ServiceUrl, Severity } from '@core/models';
 
 @Component({
@@ -64,7 +65,7 @@ import type { Service, ServiceUrl, Severity } from '@core/models';
                     {{ originLabel(f) }}
                   </td>
                   <td class="px-4 h-10" [class.opacity-60]="f.excluded">
-                    <app-auth-pill [method]="f.auth_method" [muted]="f.excluded"></app-auth-pill>
+                    <app-auth-pill [method]="f.auth_method" [muted]="f.excluded" [correctedFrom]="correctedFrom(f)"></app-auth-pill>
                   </td>
                   <td class="px-4 h-10 text-xs text-fg-muted font-mono truncate max-w-[260px]"
                       [class.opacity-60]="f.excluded"
@@ -103,6 +104,7 @@ import type { Service, ServiceUrl, Severity } from '@core/models';
 export class FindingsSectionComponent {
   readonly icons = { ChevronDown, ChevronRight };
   readonly originLabel = originLabel;
+  readonly correctedFrom = correctedFrom;
 
   readonly heading = input.required<string>();
   readonly severity = input.required<Severity>();

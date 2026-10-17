@@ -12,7 +12,7 @@ import {
   requestHeaders,
   responseHeaders
 } from '@lib/service';
-import { unresolvedReason } from '@lib/verdict';
+import { authMethodLabel, correctableReason, correctedFrom, manualAuthTargets } from '@lib/verdict';
 import type { AuthMethod, Service } from '@core/models';
 
 @Component({
@@ -41,19 +41,43 @@ import type { AuthMethod, Service } from '@core/models';
           <div>
             <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Auth method</p>
             <div class="flex items-center gap-2">
-              <app-auth-pill [method]="f.auth_method"></app-auth-pill>
+              <app-auth-pill [method]="f.auth_method" [correctedFrom]="correctedFrom(f)"></app-auth-pill>
             </div>
-            @if (unresolvedReason(f.auth_method); as reason) {
-              <!-- Why the pill reads UNKNOWN. Comes from the verdict, not the
-                   evidence, so it shows on a locked scan and on a service
-                   that kept no request. -->
+            @if (correctedFrom(f); as from) {
+              <p class="text-[11px] text-fg-subtle mt-1">
+                Set manually; the scanners found {{ authMethodLabel(from) }}.
+              </p>
+            }
+            @if (correctableReason(f.scanners_auth_method ?? f.auth_method); as reason) {
+              <!-- Why the scanners left the method to a person: the pill reads
+                   UNKNOWN or NEGOTIATE, or did before the correction. Comes
+                   from the verdict, not the evidence, so it shows on a locked
+                   scan and on a service that kept no request. -->
               <p class="text-[11px] text-fg-subtle mt-1">{{ reason }}</p>
-              @if (!readonly()) {
+            }
+            @if (!readonly()) {
+              @if (manualAuthTargets(f.scanners_auth_method); as targets) {
                 <div class="mt-2 space-y-1">
-                  <app-auth-method-select
-                    (methodSelected)="setAuthMethod.emit({ finding: f, method: $event })">
-                  </app-auth-method-select>
-                  <p class="text-[11px] text-fg-subtle">Set it manually to update the verdict.</p>
+                  <div class="flex items-center gap-2">
+                    <app-auth-method-select
+                      [methods]="targets"
+                      [current]="f.auth_method"
+                      [label]="correctedFrom(f) ? 'Change auth method…' : 'Set auth method…'"
+                      (methodSelected)="setAuthMethod.emit({ finding: f, method: $event })">
+                    </app-auth-method-select>
+                    @if (correctedFrom(f); as from) {
+                      <!-- Undo is setting the scanners' verdict back. -->
+                      <app-button
+                        variant="ghost"
+                        size="sm"
+                        (click)="setAuthMethod.emit({ finding: f, method: from })">
+                        Undo
+                      </app-button>
+                    }
+                  </div>
+                  @if (!correctedFrom(f)) {
+                    <p class="text-[11px] text-fg-subtle">Set it manually to update the verdict.</p>
+                  }
                 </div>
               }
             }
@@ -171,7 +195,10 @@ export class FindingDetailPanelComponent {
   readonly icons = { X };
   readonly originLabel = originLabel;
   readonly firstSeenOn = firstSeenOn;
-  readonly unresolvedReason = unresolvedReason;
+  readonly authMethodLabel = authMethodLabel;
+  readonly correctableReason = correctableReason;
+  readonly correctedFrom = correctedFrom;
+  readonly manualAuthTargets = manualAuthTargets;
   readonly provenanceLabel = provenanceLabel;
   readonly requestHeaders = requestHeaders;
   readonly responseHeaders = responseHeaders;

@@ -19,6 +19,7 @@ function svc(id: string, host: string, auth_method: AuthMethod, severity: Severi
     host,
     port: 443,
     auth_method,
+    scanners_auth_method: auth_method,
     severity,
     request_count: 1,
     evidence: null,
@@ -31,6 +32,12 @@ function svc(id: string, host: string, auth_method: AuthMethod, severity: Severi
 }
 
 const cleared = (id: string, host: string) => svc(id, host, 'oauth', 'cleared');
+const negotiate = (id: string, host: string) => svc(id, host, 'negotiate', 'review');
+// A negotiate a person named as NTLM: a bandit now, the scanners' verdict kept.
+const correctedToNtlm = (id: string, host: string): Service => ({
+  ...svc(id, host, 'ntlm', 'blocker'),
+  scanners_auth_method: 'negotiate'
+});
 const review = (id: string, host: string) => svc(id, host, 'unknown', 'review');
 const blocker = (id: string, host: string, excluded = false) => svc(id, host, 'ntlm', 'blocker', excluded);
 // NTLM, yet published: the registry's verdict outranks the method.
@@ -233,5 +240,43 @@ describe('ReviewPanelComponent — keyboard cursor', () => {
     fireEvent.keyDown(window, { key: 'e', altKey: true });
     expect(toggled).toEqual(['b1']);
     localStorage.clear();
+  });
+});
+
+describe('ReviewPanelComponent — manual auth correction', () => {
+  it('offers only Kerberos and NTLM for a negotiate', async () => {
+    await setup([negotiate('n1', 'sso.contoso.com')]);
+    fireEvent.click(screen.getByText(/sso\.contoso\.com/));
+    fireEvent.click(screen.getByRole('button', { name: /set auth method/i }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent?.trim())).toEqual(['KERBEROS', 'NTLM']);
+  });
+
+  it('marks a corrected service as manual and undoes it back to the scanners’ verdict', async () => {
+    const { fixture } = await setup([correctedToNtlm('n1', 'sso.contoso.com')]);
+    const panel = fixture.componentInstance;
+    const set: string[] = [];
+    panel.onSetAuthMethod = (e) => void set.push(e.method);
+
+    expect(screen.getByText('manual')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/sso\.contoso\.com/));
+    expect(screen.getByText(/the scanners found NEGOTIATE/)).toBeInTheDocument();
+    // Still editable after the correction: it can be changed again, or undone.
+    expect(screen.getByRole('button', { name: /change auth method/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /undo/i }));
+    expect(set).toEqual(['negotiate']);
+  });
+
+  it('keeps the marker but offers no edits on a frozen scan', async () => {
+    await setup([correctedToNtlm('n1', 'sso.contoso.com')], { isFrozen: true });
+    fireEvent.click(screen.getByText(/sso\.contoso\.com/));
+    expect(screen.getAllByText('manual').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /undo/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /auth method/i })).toBeNull();
+  });
+
+  it('offers no edits for a method the scanners detected', async () => {
+    await setup([blocker('b1', 'auth.contoso.com')]);
+    fireEvent.click(screen.getByText(/auth\.contoso\.com/));
+    expect(screen.queryByRole('button', { name: /auth method/i })).toBeNull();
   });
 });

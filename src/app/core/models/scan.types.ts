@@ -91,11 +91,18 @@ export interface PublishedOrigin extends ServiceOrigin {
 
 /**
  * An origin a scan found, with the combined verdict of the scanners' findings
- * (until a person fills in one the scanners could not tell).
+ * (until a person fills in one the scanners could not tell, or names the
+ * mechanism of a negotiate).
  */
 export interface Service extends ServiceOrigin {
   id: string;
   auth_method: AuthMethod;
+  /**
+   * The combined verdict itself, whatever the label was set to since: where
+   * it differs from auth_method, a person set the label, and setting it back
+   * undoes that. Null only for a service with no findings.
+   */
+  scanners_auth_method?: AuthMethod | null;
   /** The method's severity, or `published` from the registry whatever the method. */
   severity: Severity;
   request_count: number;

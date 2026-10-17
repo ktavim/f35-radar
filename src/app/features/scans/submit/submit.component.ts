@@ -22,6 +22,7 @@ import {
 } from '../data/scans.queries';
 import { ToastService } from '@shared/ui/toast.service';
 import { originLabel } from '@lib/service';
+import { correctedFrom } from '@lib/verdict';
 import { redact } from '@lib/redact';
 import type { AppSummary, Service } from '@core/models';
 
@@ -116,7 +117,7 @@ function exportRow(f: Service) {
                         Leaker
                       </span>
                     }
-                    <app-auth-pill [method]="f.auth_method"></app-auth-pill>
+                    <app-auth-pill [method]="f.auth_method" [correctedFrom]="correctedFrom(f)"></app-auth-pill>
                   </span>
                 </li>
               }
@@ -137,7 +138,7 @@ function exportRow(f: Service) {
                 <li class="px-4 py-2">
                   <div class="flex items-center justify-between gap-3">
                     <span class="font-mono text-xs text-fg-muted line-through truncate">{{ originLabel(f) }}</span>
-                    <app-auth-pill [method]="f.auth_method" [muted]="true"></app-auth-pill>
+                    <app-auth-pill [method]="f.auth_method" [muted]="true" [correctedFrom]="correctedFrom(f)"></app-auth-pill>
                   </div>
                 </li>
               }
@@ -174,6 +175,7 @@ function exportRow(f: Service) {
 export class SubmitComponent {
   readonly icons = { Check, Copy, Download };
   readonly originLabel = originLabel;
+  readonly correctedFrom = correctedFrom;
   readonly id = input.required<string>();
 
   private readonly router = inject(Router);

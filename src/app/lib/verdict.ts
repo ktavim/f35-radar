@@ -1,4 +1,4 @@
-import type { AuthMethod, Severity } from '@core/models';
+import type { AuthMethod, Service, Severity } from '@core/models';
 
 /**
  * Mirror of the backend's `severity_for` (core/translate.py) so optimistic
@@ -29,13 +29,67 @@ export function severityForAuthMethod(method: AuthMethod): Severity {
 
 /**
  * The answers the scanners leave when they cannot tell the method. The manual
- * auth-method override exists to fill these in; a resolved method is not
- * editable.
+ * auth-method override exists to fill these in, see `manualAuthTargets`.
  */
 const UNRESOLVED: ReadonlySet<AuthMethod> = new Set<AuthMethod>(['unknown', 'no_response', 'dns_failed']);
 
 export function isUnresolvedAuthMethod(method: AuthMethod): boolean {
   return UNRESOLVED.has(method);
+}
+
+/**
+ * The methods a person can fill in for an unresolved verdict: every concrete
+ * scheme in the backend's vocabulary. negotiate is left out although the
+ * backend accepts it, because it is itself unresolved SPNEGO: the person picks
+ * the mechanism, Kerberos or NTLM, instead.
+ */
+const FILL_IN_TARGETS: readonly AuthMethod[] = [
+  'ntlm',
+  'kerberos',
+  'oauth',
+  'login_redirect',
+  'bearer',
+  'api_key',
+  'basic',
+  'other',
+  'unauthenticated'
+];
+
+/** negotiate is SPNEGO whose mechanism went unresolved, so only the mechanism may be named. */
+const NEGOTIATE_TARGETS: readonly AuthMethod[] = ['kerberos', 'ntlm'];
+
+/**
+ * What a person may set a service's auth method to, by the scanners' verdict
+ * for it (`scanners_auth_method`), not by its current label, so a correction
+ * can be corrected again. Null where the verdict is a detected method and
+ * stays locked. Mirrors the backend's `_MANUAL_AUTH_TARGETS`
+ * (api/routes_scans.py); setting the verdict itself, which undoes a
+ * correction, is allowed on top of these.
+ */
+export function manualAuthTargets(verdict: AuthMethod | null | undefined): readonly AuthMethod[] | null {
+  if (verdict == null) return null;
+  if (isUnresolvedAuthMethod(verdict)) return FILL_IN_TARGETS;
+  if (verdict === 'negotiate') return NEGOTIATE_TARGETS;
+  return null;
+}
+
+/** Whether the backend accepts setting the service's auth method to `method`. */
+export function canSetAuthMethod(
+  s: Pick<Service, 'scanners_auth_method'>,
+  method: AuthMethod
+): boolean {
+  const targets = manualAuthTargets(s.scanners_auth_method);
+  return targets !== null && (method === s.scanners_auth_method || targets.includes(method));
+}
+
+/**
+ * The scanners' verdict when a person has set the label to something else,
+ * which is what undoing the correction restores; null when the label is the
+ * scanners' own.
+ */
+export function correctedFrom(s: Pick<Service, 'auth_method' | 'scanners_auth_method'>): AuthMethod | null {
+  const verdict = s.scanners_auth_method;
+  return verdict != null && verdict !== s.auth_method ? verdict : null;
 }
 
 export function severityColor(severity: Severity): string {
@@ -87,4 +141,16 @@ export function unresolvedReason(method: AuthMethod): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Why the scanners' verdict leaves the method for a person to name: the
+ * unresolved reason, or for negotiate that the SPNEGO mechanism is unknown.
+ * Null for a detected method.
+ */
+export function correctableReason(verdict: AuthMethod): string | null {
+  if (verdict === 'negotiate') {
+    return "The service offered Negotiate (SPNEGO), but whether it settles on Kerberos or NTLM couldn't be told.";
+  }
+  return unresolvedReason(verdict);
 }

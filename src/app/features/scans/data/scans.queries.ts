@@ -177,9 +177,10 @@ interface SetAuthMethodArgs {
 
 /**
  * Optimistic manual auth-method correction for services whose method the
- * scanners could not tell. Updates auth_method and re-derives severity locally
- * (mirroring the backend), snapshots for rollback, and surfaces failures via
- * onRollback.
+ * scanners could not tell, or whose negotiate mechanism they could not name.
+ * Setting the scanners' verdict back undoes a correction. Updates auth_method
+ * and re-derives severity locally (mirroring the backend), snapshots for
+ * rollback, and surfaces failures via onRollback.
  */
 export function useSetAuthMethodMutation(opts?: {
   onRollback?: (a: SetAuthMethodArgs) => void;

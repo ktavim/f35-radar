@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as webStreams from 'node:stream/web';
 import { ALL_FIXTURES, fixtureSummaries } from './index';
-import { severityForAuthMethod } from '@lib/verdict';
+import { canSetAuthMethod, severityForAuthMethod } from '@lib/verdict';
 
 // jsdom has no WritableStream, and msw's SSE module wants one at import time.
 // Borrow Node's before loading the handlers, which is why that import is dynamic.
@@ -62,6 +62,18 @@ describe('scan fixtures', () => {
       expect(done.payload['services']).toBe(scan.service_count);
       expect(done.payload['blockers']).toBe(scan.blocker_count);
     }
+  });
+
+  it('give every service the scanners’ verdict, and change the label only where a person may', () => {
+    for (const { services } of fixtures) {
+      for (const s of services) {
+        expect(s.scanners_auth_method).toBe(s.findings[0]!.auth_method);
+        if (s.auth_method !== s.scanners_auth_method) {
+          expect(canSetAuthMethod(s, s.auth_method)).toBe(true);
+        }
+      }
+    }
+    expect(ALL_FIXTURES.blocked.services.some((s) => s.auth_method !== s.scanners_auth_method)).toBe(true);
   });
 
   it('list every fixture in the scan summaries', () => {
