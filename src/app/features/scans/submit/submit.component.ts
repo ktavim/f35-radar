@@ -6,7 +6,6 @@ import {
   input,
   signal
 } from '@angular/core';
-import { HttpErrorResponse } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
 import { LucideAngularModule, Check, Copy, Download } from 'lucide-angular';
 import { injectQueryClient } from '@tanstack/angular-query-experimental';
@@ -25,13 +24,8 @@ import { ToastService } from '@shared/ui/toast.service';
 import { originLabel } from '@lib/service';
 import { blocksSubmit, correctedFrom } from '@lib/verdict';
 import { redact } from '@lib/redact';
+import { httpErrorMessage } from '@core/errors/http-error-message';
 import type { AppSummary, Service } from '@core/models';
-
-/** The server's reason for refusing; FastAPI nests it under `detail`. */
-function refusalMessage(err: unknown): string | undefined {
-  if (!(err instanceof HttpErrorResponse)) return undefined;
-  return err.error?.detail?.message ?? err.error?.message;
-}
 
 /** A service as the downloaded submission JSON records it. */
 function exportRow(f: Service) {
@@ -255,7 +249,7 @@ export class SubmitComponent {
       },
       // The server is authoritative: if it refuses what the checks above let
       // through (another tab changed the scan, say), show its reason.
-      onError: (err) => this.toast.error('Submit failed', refusalMessage(err))
+      onError: (err) => this.toast.error('Submit failed', httpErrorMessage(err))
     });
   }
 
