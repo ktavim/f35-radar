@@ -73,12 +73,13 @@ function makeEvent(
   return { scan_id: scanId, seq, ts: 0, type, payload };
 }
 
-async function setup(scan: ScanDetail) {
+async function setup(scan: ScanDetail, api: Partial<ScansApi> = {}) {
   const fakeSse = new FakeSseService();
   const apiStub: Partial<ScansApi> = {
     getScan: vi.fn().mockResolvedValue(scan),
     getFindings: vi.fn().mockResolvedValue([]),
-    getAppScans: vi.fn().mockResolvedValue([])
+    getAppScans: vi.fn().mockResolvedValue([]),
+    ...api
   };
   const view = await render(ScanDetailComponent, {
     inputs: { id: scan.id },
@@ -143,6 +144,42 @@ describe('ScanDetailComponent — terminal scan stream lifecycle', () => {
     await waitFor(() => expect(cmp.isTerminal()).toBe(true));
     expect(cmp.isCompleted()).toBe(false);
     expect(cmp.dockStartsCollapsed()).toBe(true);
+  });
+});
+
+// Regression: a new scan is created queued, and the status only lives on the
+// GET-backed scanQuery. Nothing refetched it mid-scan, so the page sat on
+// "queued" — with frozen counters and an empty review panel — until scan_completed.
+describe('ScanDetailComponent — queued scan', () => {
+  it('picks up the running status once the scan starts', async () => {
+    const queued = makeScan('queued', 'scn_new');
+    const running = makeScan('running', 'scn_new');
+    const getScan = vi.fn().mockResolvedValueOnce(queued).mockResolvedValue(running);
+    const { cmp, fakeSse } = await setup(queued, { getScan });
+    await waitFor(() => expect(fakeSse.handles.length).toBe(1));
+    await waitFor(() => expect(cmp.scan()?.status).toBe('queued'));
+    expect(cmp.isActive()).toBe(true);
+    expect(cmp.isRunning()).toBe(false);
+
+    fakeSse.handles[0]!.emit(makeEvent(queued.id, '0', 'scan_started', { url: queued.url }));
+
+    await waitFor(() => expect(cmp.isRunning()).toBe(true));
+    expect(getScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the review panel hidden and counts live while queued', async () => {
+    const scan = makeScan('queued');
+    const { view, cmp, fakeSse } = await setup(scan);
+    await waitFor(() => expect(fakeSse.handles.length).toBe(1));
+    await waitFor(() => expect(cmp.scan()?.status).toBe('queued'));
+    const handle = fakeSse.handles[0]!;
+
+    handle.emit(makeEvent(scan.id, '0', 'page_visited', { url: scan.url }));
+    handle.emit(makeEvent(scan.id, '1', 'scan_progress', { pages: 7 }));
+    view.detectChanges();
+
+    expect(cmp.counters().pages).toBe(7);
+    expect(view.fixture.nativeElement.querySelector('app-review-panel')).toBeNull();
   });
 });
 

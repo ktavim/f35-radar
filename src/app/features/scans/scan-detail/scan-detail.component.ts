@@ -103,7 +103,7 @@ const TERMINAL_STREAM_GRACE_MS = 4000;
           }
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          @if (isRunning()) {
+          @if (isActive()) {
             <app-button variant="ghost" size="sm" (click)="cancel()">
               Cancel scan
             </app-button>
@@ -128,7 +128,7 @@ const TERMINAL_STREAM_GRACE_MS = 4000;
       <div
         class="flex flex-col"
         [style.paddingBottom.px]="dockHeight()">
-        @if (!isRunning()) {
+        @if (!isActive()) {
           @if (findingsQuery.isLoading()) {
             <app-skeleton height="200px"></app-skeleton>
           } @else if (findingsQuery.isError()) {
@@ -206,6 +206,13 @@ export class ScanDetailComponent {
     return apps.find((a) => a.id === appId)?.name ?? appId;
   });
   readonly isRunning = computed(() => this.scan()?.status === 'running');
+  // Not yet ended: a new scan starts out queued until its jobs are picked up,
+  // and it is as live as a running one — counters follow the stream, it can be
+  // cancelled, and there are no findings to review yet.
+  readonly isActive = computed(() => {
+    const s = this.scan()?.status;
+    return s === 'queued' || s === 'running';
+  });
   // partial: one scanner completed and the other failed. The scan has ended,
   // but a scanner's results are missing, so it can only be rerun.
   readonly isTerminal = computed(() => {
@@ -240,8 +247,8 @@ export class ScanDetailComponent {
     let services = this.scan()?.service_count ?? 0;
     let auths = this.scan()?.auth_methods_identified ?? 0;
     let blockers = this.scan()?.blocker_count ?? 0;
-    // Live counters: derive from event stream when running.
-    if (this.isRunning()) {
+    // Live counters: derive from event stream while the scan is active.
+    if (this.isActive()) {
       const seen = new Set<string>();
       const authMethods = new Set<string>();
       let p = 0;
@@ -286,6 +293,12 @@ export class ScanDetailComponent {
         .subscribe({
           next: (evt) => {
             this.events.update((es) => [...es, evt]);
+            // The status lives on the GET-backed scanQuery, which nothing else
+            // refreshes mid-scan: without this a scan opened while queued stays
+            // queued until it ends, and the live counters never kick in.
+            if (evt.type === 'scan_started' || evt.type === 'job_started' || evt.type === 'job_requeued') {
+              this.scanQuery.refetch();
+            }
             if (evt.type === 'scan_completed' || evt.type === 'scan_failed') {
               this.terminalEventSeen = true;
               this.scanQuery.refetch();
@@ -339,19 +352,20 @@ export class ScanDetailComponent {
       onCleanup(() => window.clearInterval(interval));
     });
 
-    // Auto-collapse the dock on the running → terminal transition. Tracked via
-    // a "was running" flag so we only fire on the in-session transition;
+    // Auto-collapse the dock on the active → terminal transition (a queued scan
+    // can be cancelled before it runs). Tracked via a "was active" flag so we
+    // only fire on the in-session transition;
     // opening a freshly-loaded terminal scan is already handled by
     // [defaultCollapsed]="dockStartsCollapsed()". Excludes failed: a scan that
     // fails in-session has just emitted its scan_failed line into the dock, and
     // that log is the only diagnostic — keep it open rather than hiding it.
-    let wasRunning = false;
+    let wasActive = false;
     effect(() => {
-      const running = this.isRunning();
-      if (wasRunning && !running && this.isTerminal() && !this.isFailed()) {
+      const active = this.isActive();
+      if (wasActive && !active && this.isTerminal() && !this.isFailed()) {
         this.dock()?.collapse();
       }
-      wasRunning = running;
+      wasActive = active;
     });
   }
 
