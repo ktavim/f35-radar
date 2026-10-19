@@ -5,13 +5,7 @@ import { AuthPillComponent } from '@shared/components/auth-pill.component';
 import { AuthMethodSelectComponent } from '@shared/components/auth-method-select.component';
 import { ButtonComponent } from '@shared/ui/button.component';
 import { redact } from '@lib/redact';
-import {
-  firstSeenOn,
-  originLabel,
-  provenanceLabel,
-  requestHeaders,
-  responseHeaders
-} from '@lib/service';
+import { originLabel, provenanceLabel, requestHeaders, responseHeaders } from '@lib/service';
 import { authMethodLabel, correctableReason, correctedFrom, manualAuthTargets } from '@lib/verdict';
 import type { AuthMethod, Service } from '@core/models';
 
@@ -94,25 +88,6 @@ import type { AuthMethod, Service } from '@core/models';
               </ul>
             </div>
           }
-          @if (firstSeenOn(f); as page) {
-            <div>
-              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">First seen on page</p>
-              <p class="text-sm font-mono text-fg break-all">{{ page }}</p>
-            </div>
-          }
-          @if (f.sources.length) {
-            <div>
-              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Sources</p>
-              <ul class="space-y-1">
-                @for (source of f.sources; track source.kind + ':' + source.value) {
-                  <li class="flex items-baseline gap-2">
-                    <span class="shrink-0 w-20 text-[11px] text-fg-subtle">{{ source.kind }}</span>
-                    <span class="text-xs font-mono text-fg break-all">{{ redacted(source.value) }}</span>
-                  </li>
-                }
-              </ul>
-            </div>
-          }
           <div>
             <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">URL count</p>
             <div class="flex items-baseline gap-3">
@@ -168,6 +143,20 @@ import type { AuthMethod, Service } from '@core/models';
               <p class="text-xs text-fg-subtle italic">No request evidence recorded for this service.</p>
             </div>
           }
+          @if (f.sources.length) {
+            <!-- Last because the list is unbounded. -->
+            <div>
+              <p class="text-xs uppercase tracking-wide text-fg-muted mb-1">Sources</p>
+              <ul class="space-y-1">
+                @for (source of f.sources; track source.kind + ':' + source.value) {
+                  <li class="flex items-baseline gap-2">
+                    <span class="shrink-0 w-20 text-[11px] text-fg-subtle">{{ source.kind }}</span>
+                    <span class="text-xs font-mono text-fg break-all">{{ redacted(source.value) }}</span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
         </div>
         <footer class="h-14 px-4 border-t border-border flex items-center justify-end gap-2">
           @if (readonly()) {
@@ -194,7 +183,6 @@ import type { AuthMethod, Service } from '@core/models';
 export class FindingDetailPanelComponent {
   readonly icons = { X };
   readonly originLabel = originLabel;
-  readonly firstSeenOn = firstSeenOn;
   readonly authMethodLabel = authMethodLabel;
   readonly correctableReason = correctableReason;
   readonly correctedFrom = correctedFrom;

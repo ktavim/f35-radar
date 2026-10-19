@@ -1,5 +1,5 @@
 import { redact } from '@lib/redact';
-import type { Scanner, Service, ServiceOrigin, ServiceUrl } from '@core/models';
+import type { Scanner, ServiceOrigin, ServiceUrl } from '@core/models';
 
 const DEFAULT_PORTS: Readonly<Record<string, number>> = { http: 80, https: 443 };
 
@@ -11,17 +11,6 @@ export function originLabel(origin: ServiceOrigin): string {
   const host = origin.host.includes(':') ? `[${origin.host}]` : origin.host;
   const port = DEFAULT_PORTS[origin.scheme] === origin.port ? '' : `:${origin.port}`;
   return `${origin.scheme}://${host}${port}`;
-}
-
-/**
- * The page a service was first seen from: the page of its winning request,
- * else a page the interceptor called it from. Null when no page saw it, as
- * for a service only the tracer found; its other sources say where it came from.
- */
-export function firstSeenOn(service: Pick<Service, 'evidence' | 'sources'>): string | null {
-  const page = service.evidence?.page_url;
-  if (page) return page;
-  return service.sources.find((s) => s.kind === 'page')?.value ?? null;
 }
 
 /**
